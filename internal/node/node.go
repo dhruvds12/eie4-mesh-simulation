@@ -92,14 +92,13 @@ func (n *Node) Broadcast(nodes []INode) {
 
 // GetRoutingTable returns a copy of the routing table
 func (n *Node) GetRoutingTable() map[string]struct{} {
-    n.mutex.Lock()
-    defer n.mutex.Unlock()
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
 
-    // Create a copy of the routing table to avoid race conditions
-    tableCopy := make(map[string]struct{})
-    for k, v := range n.routingTable {
-        tableCopy[k] = v
-    }
-    return tableCopy
+	// Create a copy of the routing table to avoid race conditions
+	tableCopy := make(map[string]struct{})
+	for k, v := range n.routingTable {
+		tableCopy[k] = v
+	}
+	return tableCopy
 }
-

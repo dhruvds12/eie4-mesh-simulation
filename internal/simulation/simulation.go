@@ -5,11 +5,13 @@ import (
 	"time"
 
 	"github.com/dhruvds12/eie4-mesh-simulation/internal/node"
+	"github.com/dhruvds12/eie4-mesh-simulation/internal/utils"
 )
 
 // RunSimulation initializes the network and starts the simulation
 func RunSimulation(numNodes int, duration time.Duration) {
 	nodes := []node.INode{} // Use interface type
+	utils.MonitorResources(1 * time.Second)
 
 	// Create and start nodes
 	for i := 0; i < numNodes; i++ {
