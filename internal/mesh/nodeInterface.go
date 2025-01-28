@@ -2,14 +2,16 @@ package mesh
 
 import (
 	"mesh-simulation/internal/message"
+
+	"github.com/google/uuid"
 )
 
 type INode interface {
-	GetID() string
+	GetID() uuid.UUID
 	Run(net INetwork)
 
 	// Example actions:
-	SendData(net INetwork, destID, payload string)
+	SendData(net INetwork, destID uuid.UUID, payload string)
 	BroadcastHello(net INetwork)
 	HandleMessage(net INetwork, msg message.IMessage)
 	GetMessageChan() chan message.IMessage

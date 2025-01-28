@@ -1,5 +1,7 @@
 package message
 
+import "github.com/google/uuid"
+
 // TODO Change to be more like packet headers
 // MessageType is a string representing different message categories.
 type MessageType string
@@ -9,14 +11,14 @@ const (
 	MsgHelloAck MessageType = "HELLO_ACK"
 	MsgData     MessageType = "DATA"
 
-	BroadcastID = "BROADCAST"
+	BroadcastID = "00000000-0000-0000-0000-000000000000"
 )
 
 // Message is a simple struct implementing IMessage.
 type Message struct {
 	Type    MessageType
-	From    string
-	To      string
+	From    uuid.UUID
+	To      uuid.UUID
 	ID      string
 	Payload string
 }
@@ -27,12 +29,12 @@ func (m *Message) GetType() MessageType {
 }
 
 // GetFrom returns the sender's ID.
-func (m *Message) GetFrom() string {
+func (m *Message) GetFrom() uuid.UUID {
 	return m.From
 }
 
 // GetTo returns the destination ID.
-func (m *Message) GetTo() string {
+func (m *Message) GetTo() uuid.UUID {
 	return m.To
 }
 

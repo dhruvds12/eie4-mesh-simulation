@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"time"
+
 	network "mesh-simulation/internal/network"
 	node "mesh-simulation/internal/node"
-	"time"
 )
 
 // ----------------------------------------------------------------------------
@@ -18,9 +19,9 @@ func main() {
 	go net.Run()
 
 	//Create some initial nodes
-	nodeA := node.NewNode("A")
-	nodeB := node.NewNode("B")
-	nodeC := node.NewNode("C")
+	nodeA := node.NewNode()
+	nodeB := node.NewNode()
+	nodeC := node.NewNode()
 
 	//Join the nodes to the network
 	net.Join(nodeA)
@@ -30,33 +31,33 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	// Peer to peer communication between nodes
-	nodeA.SendData(net, "B", "SensorReading=123")
-	nodeB.SendData(net, "C", "SensorReading=456")
+	nodeA.SendData(net, nodeB.GetID(), "SensorReading=123")
+	nodeB.SendData(net, nodeC.GetID(), "SensorReading=456")
 
 	time.Sleep(2 * time.Second)
 	// Create a new node and join it to the network
-	nodeD := node.NewNode("D")
+	nodeD := node.NewNode()
 	net.Join(nodeD)
 
 	time.Sleep(2 * time.Second)
 
-	nodeD.SendData(net, "A", "Hello A, I'm new here!")
+	nodeD.SendData(net, nodeA.GetID(), "Hello A, I'm new here!")
 
 	time.Sleep(2 * time.Second)
-	fmt.Println("Node B is leaving...")
-	net.Leave("B")
+	fmt.Printf("%s is leaving...", nodeB.GetID())
+	net.Leave(nodeB.GetID())
 
 	time.Sleep(2 * time.Second)
 	// try send data to a node that is not in the network
-	nodeD.SendData(net, "B", "Hello B, I'm new here!")
+	nodeD.SendData(net, nodeB.GetID(), "Hello B, I'm new here!")
 
 	time.Sleep(3 * time.Second)
 
 	fmt.Println("Shutting down simulation.")
 
-	net.Leave("A")
-	net.Leave("C")
-	net.Leave("D")
+	net.Leave(nodeA.GetID())
+	net.Leave(nodeC.GetID())
+	net.Leave(nodeD.GetID())
 
 	time.Sleep(1 * time.Second)
 }

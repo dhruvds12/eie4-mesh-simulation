@@ -6,22 +6,24 @@ import (
 
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
+
+	"github.com/google/uuid"
 )
 
 type networkImpl struct {
 	mu    sync.RWMutex
-	nodes map[string]mesh.INode
+	nodes map[uuid.UUID]mesh.INode
 
 	joinRequests  chan mesh.INode
-	leaveRequests chan string
+	leaveRequests chan uuid.UUID
 }
 
 // NewNetwork creates a new instance of the network.
 func NewNetwork() mesh.INetwork {
 	return &networkImpl{
-		nodes:         make(map[string]mesh.INode),
+		nodes:         make(map[uuid.UUID]mesh.INode),
 		joinRequests:  make(chan mesh.INode),
-		leaveRequests: make(chan string),
+		leaveRequests: make(chan uuid.UUID),
 	}
 }
 
@@ -43,7 +45,7 @@ func (net *networkImpl) Join(n mesh.INode) {
 }
 
 // Leave removes a node from the network by ID.
-func (net *networkImpl) Leave(nodeID string) {
+func (net *networkImpl) Leave(nodeID uuid.UUID) {
 	net.leaveRequests <- nodeID
 }
 
@@ -89,7 +91,7 @@ func (net *networkImpl) addNode(n mesh.INode) {
 }
 
 // removeNode signals the node to stop and removes it from the map.
-func (net *networkImpl) removeNode(nodeID string) {
+func (net *networkImpl) removeNode(nodeID uuid.UUID) {
 	net.mu.Lock()
 	if nd, ok := net.nodes[nodeID]; ok {
 		// Close the node's quit channel if there's a direct handle

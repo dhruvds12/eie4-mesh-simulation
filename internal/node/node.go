@@ -7,32 +7,34 @@ import (
 
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
+
+	"github.com/google/uuid"
 )
 
 // nodeImpl is a concrete implementation of INode.
 type nodeImpl struct {
-	id             string
+	id             uuid.UUID
 	messages       chan message.IMessage
 	quit           chan struct{}
 	seenBroadcasts map[string]bool
 
 	muNeighbors sync.RWMutex
-	neighbors   map[string]bool
+	neighbors   map[uuid.UUID]bool
 }
 
 // NewNode creates a new Node with a given ID.
-func NewNode(id string) mesh.INode {
+func NewNode() mesh.INode {
 	return &nodeImpl{
-		id:             id,
+		id:             uuid.New(),
 		messages:       make(chan message.IMessage, 20),
 		quit:           make(chan struct{}),
 		seenBroadcasts: make(map[string]bool),
-		neighbors:      make(map[string]bool),
+		neighbors:      make(map[uuid.UUID]bool),
 	}
 }
 
 // GetID returns the node's ID.
-func (n *nodeImpl) GetID() string {
+func (n *nodeImpl) GetID() uuid.UUID {
 	return n.id
 }
 
@@ -52,12 +54,12 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 }
 
 // SendData sends a unicast DATA message to a specific destination.
-func (n *nodeImpl) SendData(net mesh.INetwork, destID, payload string) {
+func (n *nodeImpl) SendData(net mesh.INetwork, destID uuid.UUID, payload string) {
 	m := &message.Message{
 		Type:    message.MsgData,
 		From:    n.id,
 		To:      destID,
-		ID:      "", // Not used for unicast
+		ID:      "", // Not a broadcast
 		Payload: payload,
 	}
 	net.UnicastMessage(m, n)
@@ -68,10 +70,16 @@ func (n *nodeImpl) BroadcastHello(net mesh.INetwork) {
 	// Create a unique broadcast ID to deduplicate
 	broadcastID := fmt.Sprintf("hello-%s-%d", n.id, time.Now().UnixNano())
 
+	to, err := uuid.Parse(message.BroadcastID)
+
+	if err != nil {
+		panic(fmt.Sprintf("Node %s: failed to parse broadcast ID: %v\n", n.id, err))
+	}
+
 	m := &message.Message{
 		Type:    message.MsgHello,
 		From:    n.id,
-		To:      message.BroadcastID,
+		To:      to,
 		ID:      broadcastID,
 		Payload: fmt.Sprintf("Hello from %s", n.id),
 	}
