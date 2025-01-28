@@ -14,6 +14,7 @@ import (
 // nodeImpl is a concrete implementation of INode.
 type nodeImpl struct {
 	id             uuid.UUID
+	coordinates    mesh.Coordinates
 	messages       chan message.IMessage
 	quit           chan struct{}
 	seenBroadcasts map[string]bool
@@ -23,9 +24,10 @@ type nodeImpl struct {
 }
 
 // NewNode creates a new Node with a given ID.
-func NewNode() mesh.INode {
+func NewNode(lat, long float64) mesh.INode {
 	return &nodeImpl{
 		id:             uuid.New(),
+		coordinates:    mesh.CreateCoordinates(lat, long),
 		messages:       make(chan message.IMessage, 20),
 		quit:           make(chan struct{}),
 		seenBroadcasts: make(map[string]bool),
@@ -94,6 +96,9 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 	case message.MsgHelloAck:
 		fmt.Printf("Node %s: received HELLO_ACK from %s, payload=%q\n",
 			n.id, msg.GetFrom(), msg.GetPayload())
+		n.muNeighbors.Lock()
+		n.neighbors[msg.GetFrom()] = true
+		n.muNeighbors.Unlock()
 	case message.MsgData:
 		fmt.Printf("Node %s: received DATA from %s, payload=%q\n",
 			n.id, msg.GetFrom(), msg.GetPayload())
@@ -113,6 +118,11 @@ func (n *nodeImpl) handleHello(net mesh.INetwork, msg message.IMessage) {
 	fmt.Printf("Node %s: received HELLO from %s, payload=%q\n",
 		n.id, msg.GetFrom(), msg.GetPayload())
 
+	// Add the sender to the list of neighbors
+	n.muNeighbors.Lock()
+	n.neighbors[msg.GetFrom()] = true
+	n.muNeighbors.Unlock()
+	
 	// We won't re-broadcast to avoid infinite loops in a fully connected scenario.
 	// Instead, send a unicast HELLO_ACK back.
 	ack := &message.Message{
@@ -131,4 +141,33 @@ func (n *nodeImpl) GetMessageChan() chan message.IMessage {
 
 func (n *nodeImpl) GetQuitChan() chan struct{} {
 	return n.quit
+}
+
+func (n *nodeImpl) GetPosition() mesh.Coordinates {
+	return n.coordinates
+}
+
+func (n *nodeImpl) SetPosition(coord mesh.Coordinates) {
+	n.coordinates = coord
+}
+
+// PrintNodeDetails prints the details of a node in a nicely formatted way
+func (n *nodeImpl) PrintNodeDetails() {
+	fmt.Println("====================================")
+	fmt.Println("Node Details:")
+	fmt.Printf("  ID:          %s\n", n.id)
+	fmt.Printf("  Coordinates: (Lat: %.2f, Long: %.2f)\n", n.coordinates.Lat, n.coordinates.Long)
+	fmt.Printf("  Messages:    %d messages in queue\n", len(n.messages))
+	fmt.Printf("  Quit Signal: %v\n", n.quit != nil)
+	fmt.Println("  Seen Broadcasts:")
+	for broadcastID := range n.seenBroadcasts {
+		fmt.Printf("    - %s\n", broadcastID)
+	}
+	fmt.Println("  Neighbors:")
+	n.muNeighbors.RLock()
+	for neighborID := range n.neighbors {
+		fmt.Printf("    - %s\n", neighborID)
+	}
+	n.muNeighbors.RUnlock()
+	fmt.Println("====================================")
 }

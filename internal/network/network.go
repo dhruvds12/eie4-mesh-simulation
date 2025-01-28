@@ -18,6 +18,10 @@ type networkImpl struct {
 	leaveRequests chan uuid.UUID
 }
 
+const (
+	maxRange = 1400.0 // Maximum range for a node to communicate with another
+)
+
 // NewNetwork creates a new instance of the network.
 func NewNetwork() mesh.INetwork {
 	return &networkImpl{
@@ -58,8 +62,13 @@ func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode
 		if id == sender.GetID() {
 			continue
 		}
-		ndChan := net.getNodeChannel(nd)
-		ndChan <- msg
+
+		if net.IsInRange(sender, nd) {
+			ndChan := net.getNodeChannel(nd)
+			ndChan <- msg
+		} else {
+			fmt.Printf("[Network] Node %q is out of range for broadcast.\n", id)
+		}
 	}
 }
 
@@ -70,8 +79,13 @@ func (net *networkImpl) UnicastMessage(msg message.IMessage, sender mesh.INode) 
 
 	to := msg.GetTo()
 	if receiver, ok := net.nodes[to]; ok {
-		ndChan := net.getNodeChannel(receiver)
-		ndChan <- msg
+		if net.IsInRange(sender, receiver) {
+			ndChan := net.getNodeChannel(receiver)
+			ndChan <- msg
+		} else {
+			fmt.Printf("[Network] Node %q is out of range for node %q.\n",
+				sender.GetID(), to)
+		}
 	} else {
 		fmt.Printf("[Network] Node %q tried to send to unknown node %q.\n",
 			sender.GetID(), to)
@@ -99,6 +113,10 @@ func (net *networkImpl) removeNode(nodeID uuid.UUID) {
 		if ni, ok := nd.(interface{ QuitChan() chan struct{} }); ok {
 			close(ni.QuitChan())
 		}
+		// Print out the details of the leavign node
+		fmt.Printf("Node %s: leaving network.\n", nodeID)
+		net.nodes[nodeID].PrintNodeDetails()
+		// Remove the node from the map
 		delete(net.nodes, nodeID)
 	}
 	net.mu.Unlock()
@@ -114,4 +132,9 @@ func (net *networkImpl) getNodeChannel(n mesh.INode) chan message.IMessage {
 		return cg.GetMessageChan()
 	}
 	panic("Node does not implement channelGetter interface")
+}
+
+// Check if a node is in range to recieve signal from another node
+func (net *networkImpl) IsInRange(node1 mesh.INode, node2 mesh.INode) bool {
+	return node1.GetPosition().DistanceTo(node2.GetPosition()) <= maxRange
 }
