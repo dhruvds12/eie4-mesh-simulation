@@ -98,6 +98,7 @@ func (net *networkImpl) addNode(n mesh.INode) {
 	net.nodes[n.GetID()] = n
 	net.mu.Unlock()
 
+	log.Printf("[sim] Node %s: joining network.\n", n.GetID())
 	go n.Run(net)
 
 	// Broadcast a HELLO so new node can discover neighbors.
@@ -114,7 +115,7 @@ func (net *networkImpl) removeNode(nodeID uuid.UUID) {
 			close(ni.QuitChan())
 		}
 		// Print out the details of the leavign node
-		log.Printf("Node %s: leaving network.\n", nodeID)
+		log.Printf("[sim] Node %s: leaving network.\n", nodeID)
 		net.nodes[nodeID].PrintNodeDetails()
 		// Remove the node from the map
 		delete(net.nodes, nodeID)

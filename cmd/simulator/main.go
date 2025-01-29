@@ -102,25 +102,27 @@ func simulationV2() {
 	nodeA := node.NewNode(0, 0)
 	nodeB := node.NewNode(0, 1000)
 	nodeC := node.NewNode(0, 2000)
+	nodeD := node.NewNode(0, 3000)
 
 	netw.Join(nodeA)
 	netw.Join(nodeB)
 	netw.Join(nodeC)
+	netw.Join(nodeD)
 
 	// Sleep so they can broadcast HELLO and find each other
 	time.Sleep(2 * time.Second)
 
 	// Now let's test multi-hop. A wants to send data to C
 	log.Println("NodeA -> NodeC: sending data! -> setting up route")
-	nodeA.SendData(netw, nodeC.GetID(), "Hello from A to C")
+	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to C")
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	// Have to send message twice as first time is used to discover route -> to be fixed
 	log.Println("NodeA -> NodeC: sending data!")
 	log.Println("NodeA iD: ", nodeA.GetID())
-	log.Println("NodeC iD: ", nodeC.GetID())
-	nodeA.SendData(netw, nodeC.GetID(), "Hello from A to C")
+	log.Println("NodeD iD: ", nodeD.GetID())
+	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to D")
 
 	// Let the route discovery / data forwarding happen
 	time.Sleep(10 * time.Second)

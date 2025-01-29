@@ -2,8 +2,8 @@ package routing
 
 import (
 	"encoding/json"
-	"log"
 	"fmt"
+	"log"
 	"time"
 
 	"mesh-simulation/internal/mesh"
@@ -54,17 +54,19 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 		return
 	}
 
-    // 2. We have a route -> unicast data to NextHop
-    nextHop := entry.NextHop
-    dataMsg := &message.Message{
-        Type:    message.MsgData,
-        From:    r.ownerID,
-        To:      nextHop, //Todo: this could be nextHop
-        Dest:    destID,
-        ID:      fmt.Sprintf("data-%s-%s-%d", r.ownerID, destID, time.Now().UnixNano()),
-        Payload: payload,
-    }
-    net.UnicastMessage(dataMsg, sender)
+	// 2. We have a route -> unicast data to NextHop
+	nextHop := entry.NextHop
+	dataMsg := &message.Message{
+		Type:    message.MsgData,
+		From:    r.ownerID,
+		To:      nextHop, //Todo: this could be nextHop
+		Dest:    destID,
+		ID:      fmt.Sprintf("data-%s-%s-%d", r.ownerID, destID, time.Now().UnixNano()),
+		Payload: payload,
+	}
+
+	log.Printf("[sim] Node %s (router) -> forwarding data to %s via %s\n", r.ownerID, destID, nextHop)
+	net.UnicastMessage(dataMsg, sender)
 }
 
 // HandleMessage is called when the node receives any message
@@ -95,29 +97,29 @@ func (r *AODVRouter) AddDirectNeighbor(nodeID, neighborID uuid.UUID) {
 			NextHop:     neighborID,
 			HopCount:    1,
 		}
-		log.Printf("Node %s (router) -> direct neighbor: %s\n", r.ownerID, neighborID)
+		log.Printf("[sim] [routing table] Node %s (router) -> direct neighbor: %s\n", r.ownerID, neighborID)
 	}
 }
 
 // -- Private AODV logic --
 
 func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID uuid.UUID) {
-    ctrl := AODVControl{
-        Source:      r.ownerID,
-        Destination: destID,
-        HopCount:    0,
-    }
-    bytes, _ := json.Marshal(ctrl)
+	ctrl := AODVControl{
+		Source:      r.ownerID,
+		Destination: destID,
+		HopCount:    0,
+	}
+	bytes, _ := json.Marshal(ctrl)
 
-    broadcastID := fmt.Sprintf("rreq-%s-%d", r.ownerID, time.Now().UnixNano())
-    rreqMsg := &message.Message{
-        Type:    message.MsgRREQ,
-        From:    r.ownerID,
-        To:      uuid.MustParse(message.BroadcastID),
-        ID:      broadcastID, //TODO: this should be unique
-        Payload: string(bytes),
-    }
-    net.BroadcastMessage(rreqMsg, sender)
+	broadcastID := fmt.Sprintf("rreq-%s-%d", r.ownerID, time.Now().UnixNano())
+	rreqMsg := &message.Message{
+		Type:    message.MsgRREQ,
+		From:    r.ownerID,
+		To:      uuid.MustParse(message.BroadcastID),
+		ID:      broadcastID, //TODO: this should be unique
+		Payload: string(bytes),
+	}
+	net.BroadcastMessage(rreqMsg, sender)
 }
 
 func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.IMessage) {
@@ -168,20 +170,20 @@ func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, source, destin
 		return
 	}
 
-    rrepData := AODVControl{
-        Source:      destination,
-        Destination: source,
-        HopCount:    hopCount,
-    }
-    bytes, _ := json.Marshal(rrepData)
-    rrepMsg := &message.Message{
-        Type:    message.MsgRREP,
-        From:    r.ownerID,
-        To:      reverseRoute.NextHop,
-        ID:      fmt.Sprintf("rrep-%s-%s-%d", destination, source, time.Now().UnixNano()),
-        Payload: string(bytes),
-    }
-    net.UnicastMessage(rrepMsg, node)
+	rrepData := AODVControl{
+		Source:      destination,
+		Destination: source,
+		HopCount:    hopCount,
+	}
+	bytes, _ := json.Marshal(rrepData)
+	rrepMsg := &message.Message{
+		Type:    message.MsgRREP,
+		From:    r.ownerID,
+		To:      reverseRoute.NextHop,
+		ID:      fmt.Sprintf("rrep-%s-%s-%d", destination, source, time.Now().UnixNano()),
+		Payload: string(bytes),
+	}
+	net.UnicastMessage(rrepMsg, node)
 }
 
 func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, msg message.IMessage) {
@@ -227,16 +229,19 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, msg message.
 func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg message.IMessage) {
 	// If I'm the final destination, do nothing -> the node can "deliver" it
 	if msg.GetDest() == r.ownerID {
-		log.Printf("Node %s: DATA arrived. Payload = %q\n", r.ownerID, msg.GetPayload())
+		log.Printf("[sim] Node %s: DATA arrived. Payload = %q\n", r.ownerID, msg.GetPayload())
 		return
 	}
 
+	//TODO: Could this just call SendData?
+
 	// Otherwise, I should forward it if I have a route
+	originID := msg.GetFrom()
 	dest := msg.GetDest()
 	route, ok := r.routeTable[dest]
 	if !ok {
 		// No route, we might trigger route discovery or drop
-		log.Printf("Node %s: no route to forward DATA destined for %s.\n", r.ownerID, dest)
+		log.Printf("[sim] Node %s: no route to forward DATA destined for %s.\n", r.ownerID, dest)
 		// Optionally: r.initiateRREQ(...)
 		return
 	}
@@ -250,6 +255,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 		ID:      msg.GetID(), // keep same ID or generate new
 		Payload: msg.GetPayload(),
 	}
+	log.Printf("[sim] Node %s: forwarding DATA from %s to %s via %s\n", r.ownerID, originID, dest, route.NextHop)
 	net.UnicastMessage(fwdMsg, node)
 }
 
@@ -257,6 +263,8 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 func (r *AODVRouter) maybeAddRoute(dest, nextHop uuid.UUID, hopCount int) {
 	exist, ok := r.routeTable[dest]
 	if !ok || hopCount < exist.HopCount {
+		// log an update to the routing table
+		log.Printf("[sim] [routing table] Node %s (router) -> updated route to %s via %s (hop count %d)\n", r.ownerID, dest, nextHop, hopCount)
 		r.routeTable[dest] = &RouteEntry{
 			Destination: dest,
 			NextHop:     nextHop,

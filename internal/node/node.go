@@ -30,6 +30,7 @@ type nodeImpl struct {
 // NewNode creates a new Node with a given ID.
 func NewNode(lat, long float64) mesh.INode {
 	nodeID := uuid.New()
+	log.Printf("[sim] Created new node ID: %s, x: %f, y: %f", nodeID, lat, long)
 	return &nodeImpl{
 		id:             nodeID,
 		coordinates:    mesh.CreateCoordinates(lat, long),
@@ -106,7 +107,7 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 	case message.MsgHello:
 		n.handleHello(net, msg)
 	case message.MsgHelloAck:
-		log.Printf("Node %s: received HELLO_ACK from %s, payload=%q\n",
+		log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
 			n.id, msg.GetFrom(), msg.GetPayload())
 		n.muNeighbors.Lock()
 		n.neighbors[msg.GetFrom()] = true
@@ -133,7 +134,7 @@ func (n *nodeImpl) handleHello(net mesh.INetwork, msg message.IMessage) {
 
 	neighborID := msg.GetFrom()
 
-	log.Printf("Node %s: received HELLO from %s, payload=%q\n",
+	log.Printf("[sim] Node %s: received HELLO from %s, payload=%q\n",
 		n.id, neighborID, msg.GetPayload())
 
 	// Add the sender to the list of neighbors
