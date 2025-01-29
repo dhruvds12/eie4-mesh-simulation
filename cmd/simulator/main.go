@@ -19,9 +19,9 @@ func main() {
 	go net.Run()
 
 	//Create some initial nodes
-	nodeA := node.NewNode()
-	nodeB := node.NewNode()
-	nodeC := node.NewNode()
+	nodeA := node.NewNode(0, 0)
+	nodeB := node.NewNode(2800, 0)
+	nodeC := node.NewNode(1400, 0)
 
 	//Join the nodes to the network
 	net.Join(nodeA)
@@ -36,7 +36,7 @@ func main() {
 
 	time.Sleep(2 * time.Second)
 	// Create a new node and join it to the network
-	nodeD := node.NewNode()
+	nodeD := node.NewNode(700, 0)
 	net.Join(nodeD)
 
 	time.Sleep(2 * time.Second)
@@ -45,6 +45,7 @@ func main() {
 
 	time.Sleep(2 * time.Second)
 	fmt.Printf("%s is leaving...", nodeB.GetID())
+	fmt.Println()
 	net.Leave(nodeB.GetID())
 
 	time.Sleep(2 * time.Second)
