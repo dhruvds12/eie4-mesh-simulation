@@ -7,6 +7,7 @@ import (
 
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
+	"mesh-simulation/internal/routing"
 
 	"github.com/google/uuid"
 )
@@ -17,21 +18,25 @@ type nodeImpl struct {
 	coordinates    mesh.Coordinates
 	messages       chan message.IMessage
 	quit           chan struct{}
-	seenBroadcasts map[string]bool
+	
+	router      routing.IRouter 
 
 	muNeighbors sync.RWMutex
 	neighbors   map[uuid.UUID]bool
+	seenBroadcasts map[string]bool
 }
 
 // NewNode creates a new Node with a given ID.
 func NewNode(lat, long float64) mesh.INode {
+	nodeID := uuid.New()
 	return &nodeImpl{
-		id:             uuid.New(),
+		id:             nodeID,
 		coordinates:    mesh.CreateCoordinates(lat, long),
 		messages:       make(chan message.IMessage, 20),
 		quit:           make(chan struct{}),
 		seenBroadcasts: make(map[string]bool),
 		neighbors:      make(map[uuid.UUID]bool),
+		router:		 	routing.NewAODVRouter(nodeID),
 	}
 }
 
@@ -55,16 +60,21 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 	}
 }
 
-// SendData sends a unicast DATA message to a specific destination.
+// // SendData sends a unicast DATA message to a specific destination.
+// func (n *nodeImpl) SendData(net mesh.INetwork, destID uuid.UUID, payload string) {
+// 	m := &message.Message{
+// 		Type:    message.MsgData,
+// 		From:    n.id,
+// 		To:      destID,
+// 		ID:      "", // Not a broadcast
+// 		Payload: payload,
+// 	}
+// 	net.UnicastMessage(m, n)
+// }
+
+// SendData is a convenience method calling into the router
 func (n *nodeImpl) SendData(net mesh.INetwork, destID uuid.UUID, payload string) {
-	m := &message.Message{
-		Type:    message.MsgData,
-		From:    n.id,
-		To:      destID,
-		ID:      "", // Not a broadcast
-		Payload: payload,
-	}
-	net.UnicastMessage(m, n)
+    n.router.SendData(net, n, destID, payload)
 }
 
 // BroadcastHello sends a HELLO broadcast announcing the node’s presence.
@@ -98,10 +108,14 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 			n.id, msg.GetFrom(), msg.GetPayload())
 		n.muNeighbors.Lock()
 		n.neighbors[msg.GetFrom()] = true
+		n.router.AddDirectNeighbor(n.id, msg.GetFrom())
 		n.muNeighbors.Unlock()
 	case message.MsgData:
-		fmt.Printf("Node %s: received DATA from %s, payload=%q\n",
-			n.id, msg.GetFrom(), msg.GetPayload())
+		// fmt.Printf("Node %s: received DATA from %s, payload=%q\n",
+			// n.id, msg.GetFrom(), msg.GetPayload())
+		n.router.HandleMessage(net, n, msg)
+	case message.MsgRREQ, message.MsgRREP:
+		n.router.HandleMessage(net, n, msg)
 	default:
 		fmt.Printf("Node %s: unknown message type from %s\n", n.id, msg.GetFrom())
 	}
@@ -115,12 +129,15 @@ func (n *nodeImpl) handleHello(net mesh.INetwork, msg message.IMessage) {
 	}
 	n.seenBroadcasts[msg.GetID()] = true
 
+	neighborID := msg.GetFrom()
+
 	fmt.Printf("Node %s: received HELLO from %s, payload=%q\n",
-		n.id, msg.GetFrom(), msg.GetPayload())
+		n.id, neighborID, msg.GetPayload())
 
 	// Add the sender to the list of neighbors
 	n.muNeighbors.Lock()
-	n.neighbors[msg.GetFrom()] = true
+	n.neighbors[neighborID] = true
+	n.router.AddDirectNeighbor(n.id, msg.GetFrom())
 	n.muNeighbors.Unlock()
 	
 	// We won't re-broadcast to avoid infinite loops in a fully connected scenario.
@@ -170,4 +187,12 @@ func (n *nodeImpl) PrintNodeDetails() {
 	}
 	n.muNeighbors.RUnlock()
 	fmt.Println("====================================")
+}
+
+func (n *nodeImpl) GetRouter() routing.IRouter {
+    return n.router
+}
+
+func (n *nodeImpl) SetRouter(r routing.IRouter) {
+    n.router = r
 }
