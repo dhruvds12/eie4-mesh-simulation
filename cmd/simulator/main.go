@@ -1,11 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"time"
+	"io"
 	"log"
 	"os"
-	"io"
+	"time"
 
 	network "mesh-simulation/internal/network"
 	node "mesh-simulation/internal/node"
@@ -14,36 +13,35 @@ import (
 // ----------------------------------------------------------------------------
 // Main Simulation
 // ----------------------------------------------------------------------------
-
 func main() {
-	logSetup()
+		// Create logs directory if it doesn't exist
+		if err := os.MkdirAll("logs", 0755); err != nil {
+			log.Fatalf("Failed to create logs directory: %v", err)
+		}
+	
+		// Create log file with timestamp in name
+		timestamp := time.Now().Format("2006-01-02_15-04-05")
+		logFile, err := os.OpenFile("logs/log_"+timestamp+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatalf("Failed to open log file: %v", err)
+		}
+		defer logFile.Close()
+	
+		// Create a MultiWriter to write to both the log file and stdout
+		multiWriter := io.MultiWriter(os.Stdout, logFile)
+	
+		// Set log output to multiWriter
+		log.SetOutput(multiWriter)
+	
+		
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+	
+		// Log start of simulation
+		log.Println("Starting simulation...")
 	simulationV2()
 
 }
 
-func logSetup() {
-	// Create logs directory if it doesn't exist
-	if err := os.MkdirAll("logs", 0755); err != nil {
-		log.Fatalf("Failed to create logs directory: %v", err)
-	}
-
-	// Create log file with timestamp in name
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	logFile, err := os.OpenFile("logs/log_"+timestamp+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	defer logFile.Close()
-
-	// Create a MultiWriter to write to both the log file and stdout
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
-
-	// Set log output to multiWriter
-	log.SetOutput(multiWriter)
-
-	// Remove date and time prefix from log entries
-	log.SetFlags(0)
-}
 
 func simulationV1() {
 	//Create the network and start it
@@ -78,8 +76,8 @@ func simulationV1() {
 	nodeD.SendData(net, nodeA.GetID(), "Hello A, I'm new here!")
 
 	time.Sleep(2 * time.Second)
-	fmt.Printf("%s is leaving...", nodeB.GetID())
-	fmt.Println()
+	log.Printf("%s is leaving...", nodeB.GetID())
+	log.Println()
 	net.Leave(nodeB.GetID())
 
 	time.Sleep(2 * time.Second)
@@ -88,7 +86,7 @@ func simulationV1() {
 
 	time.Sleep(3 * time.Second)
 
-	fmt.Println("Shutting down simulation.")
+	log.Println("Shutting down simulation.")
 
 	net.Leave(nodeA.GetID())
 	net.Leave(nodeC.GetID())
@@ -101,10 +99,9 @@ func simulationV2() {
 	netw := network.NewNetwork()
 	go netw.Run()
 
-
-	nodeA := node.NewNode(0, 0)    
-	nodeB := node.NewNode(0, 1000) 
-	nodeC := node.NewNode(0, 2000) 
+	nodeA := node.NewNode(0, 0)
+	nodeB := node.NewNode(0, 1000)
+	nodeC := node.NewNode(0, 2000)
 
 	netw.Join(nodeA)
 	netw.Join(nodeB)
@@ -114,21 +111,21 @@ func simulationV2() {
 	time.Sleep(2 * time.Second)
 
 	// Now let's test multi-hop. A wants to send data to C
-	fmt.Println("NodeA -> NodeC: sending data! -> setting up route")
+	log.Println("NodeA -> NodeC: sending data! -> setting up route")
 	nodeA.SendData(netw, nodeC.GetID(), "Hello from A to C")
 
 	time.Sleep(30 * time.Second)
-	
+
 	// Have to send message twice as first time is used to discover route -> to be fixed
-	fmt.Println("NodeA -> NodeC: sending data!")
-	fmt.Println("NodeA iD: ", nodeA.GetID())
-	fmt.Println("NodeC iD: ", nodeC.GetID())
+	log.Println("NodeA -> NodeC: sending data!")
+	log.Println("NodeA iD: ", nodeA.GetID())
+	log.Println("NodeC iD: ", nodeC.GetID())
 	nodeA.SendData(netw, nodeC.GetID(), "Hello from A to C")
 
 	// Let the route discovery / data forwarding happen
-	time.Sleep(30 * time.Second)
+	time.Sleep(10 * time.Second)
 
-	fmt.Println("Shutting down.")
+	log.Println("Shutting down.")
 	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
 	netw.Leave(nodeC.GetID())

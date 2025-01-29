@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -14,15 +15,15 @@ import (
 
 // nodeImpl is a concrete implementation of INode.
 type nodeImpl struct {
-	id             uuid.UUID
-	coordinates    mesh.Coordinates
-	messages       chan message.IMessage
-	quit           chan struct{}
-	
-	router      routing.IRouter 
+	id          uuid.UUID
+	coordinates mesh.Coordinates
+	messages    chan message.IMessage
+	quit        chan struct{}
 
-	muNeighbors sync.RWMutex
-	neighbors   map[uuid.UUID]bool
+	router routing.IRouter
+
+	muNeighbors    sync.RWMutex
+	neighbors      map[uuid.UUID]bool
 	seenBroadcasts map[string]bool
 }
 
@@ -36,7 +37,7 @@ func NewNode(lat, long float64) mesh.INode {
 		quit:           make(chan struct{}),
 		seenBroadcasts: make(map[string]bool),
 		neighbors:      make(map[uuid.UUID]bool),
-		router:		 	routing.NewAODVRouter(nodeID),
+		router:         routing.NewAODVRouter(nodeID),
 	}
 }
 
@@ -47,8 +48,8 @@ func (n *nodeImpl) GetID() uuid.UUID {
 
 // Run is the main goroutine for the node, processing incoming messages.
 func (n *nodeImpl) Run(net mesh.INetwork) {
-	fmt.Printf("Node %s: started.\n", n.id)
-	defer fmt.Printf("Node %s: stopped.\n", n.id)
+	log.Printf("Node %s: started.\n", n.id)
+	defer log.Printf("Node %s: stopped.\n", n.id)
 
 	for {
 		select {
@@ -74,7 +75,7 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 
 // SendData is a convenience method calling into the router
 func (n *nodeImpl) SendData(net mesh.INetwork, destID uuid.UUID, payload string) {
-    n.router.SendData(net, n, destID, payload)
+	n.router.SendData(net, n, destID, payload)
 }
 
 // BroadcastHello sends a HELLO broadcast announcing the node’s presence.
@@ -85,7 +86,8 @@ func (n *nodeImpl) BroadcastHello(net mesh.INetwork) {
 	to, err := uuid.Parse(message.BroadcastID)
 
 	if err != nil {
-		panic(fmt.Sprintf("Node %s: failed to parse broadcast ID: %v\n", n.id, err))
+		log.Fatalf("Node %s: failed to parse broadcast ID: %v", n.id, err)
+
 	}
 
 	m := &message.Message{
@@ -104,20 +106,20 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 	case message.MsgHello:
 		n.handleHello(net, msg)
 	case message.MsgHelloAck:
-		fmt.Printf("Node %s: received HELLO_ACK from %s, payload=%q\n",
+		log.Printf("Node %s: received HELLO_ACK from %s, payload=%q\n",
 			n.id, msg.GetFrom(), msg.GetPayload())
 		n.muNeighbors.Lock()
 		n.neighbors[msg.GetFrom()] = true
 		n.router.AddDirectNeighbor(n.id, msg.GetFrom())
 		n.muNeighbors.Unlock()
 	case message.MsgData:
-		// fmt.Printf("Node %s: received DATA from %s, payload=%q\n",
-			// n.id, msg.GetFrom(), msg.GetPayload())
+		// log.Printf("Node %s: received DATA from %s, payload=%q\n",
+		// n.id, msg.GetFrom(), msg.GetPayload())
 		n.router.HandleMessage(net, n, msg)
 	case message.MsgRREQ, message.MsgRREP:
 		n.router.HandleMessage(net, n, msg)
 	default:
-		fmt.Printf("Node %s: unknown message type from %s\n", n.id, msg.GetFrom())
+		log.Printf("Node %s: unknown message type from %s\n", n.id, msg.GetFrom())
 	}
 }
 
@@ -131,7 +133,7 @@ func (n *nodeImpl) handleHello(net mesh.INetwork, msg message.IMessage) {
 
 	neighborID := msg.GetFrom()
 
-	fmt.Printf("Node %s: received HELLO from %s, payload=%q\n",
+	log.Printf("Node %s: received HELLO from %s, payload=%q\n",
 		n.id, neighborID, msg.GetPayload())
 
 	// Add the sender to the list of neighbors
@@ -139,7 +141,7 @@ func (n *nodeImpl) handleHello(net mesh.INetwork, msg message.IMessage) {
 	n.neighbors[neighborID] = true
 	n.router.AddDirectNeighbor(n.id, msg.GetFrom())
 	n.muNeighbors.Unlock()
-	
+
 	// We won't re-broadcast to avoid infinite loops in a fully connected scenario.
 	// Instead, send a unicast HELLO_ACK back.
 	ack := &message.Message{
@@ -190,9 +192,9 @@ func (n *nodeImpl) PrintNodeDetails() {
 }
 
 func (n *nodeImpl) GetRouter() routing.IRouter {
-    return n.router
+	return n.router
 }
 
 func (n *nodeImpl) SetRouter(r routing.IRouter) {
-    n.router = r
+	n.router = r
 }
