@@ -101,6 +101,13 @@ func (r *AODVRouter) AddDirectNeighbor(nodeID, neighborID uuid.UUID) {
 	}
 }
 
+func (r *AODVRouter) PrintRoutingTable() {
+	fmt.Printf("Node %s (router) -> routing table:\n", r.ownerID)
+	for dest, route := range r.routeTable {
+		fmt.Printf("   %s -> via %s (hop count %d)\n", dest, route.NextHop, route.HopCount)
+	}
+}
+
 // -- Private AODV logic --
 
 func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID uuid.UUID) {
@@ -112,6 +119,8 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 	bytes, _ := json.Marshal(ctrl)
 
 	broadcastID := fmt.Sprintf("rreq-%s-%d", r.ownerID, time.Now().UnixNano())
+	// Save the broadcast ID in the saw list to avoid responding to own RREQ
+	r.seenMsgIDs[broadcastID] = true
 	rreqMsg := &message.Message{
 		Type:    message.MsgRREQ,
 		From:    r.ownerID,
@@ -119,11 +128,13 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 		ID:      broadcastID, //TODO: this should be unique
 		Payload: string(bytes),
 	}
+	log.Printf("[RREQ init] Node %s (router) -> initiating RREQ for %s (hop count %d)\n", r.ownerID, destID, 0)
 	net.BroadcastMessage(rreqMsg, sender)
 }
 
 func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.IMessage) {
 	if r.seenMsgIDs[msg.GetID()] {
+		log.Printf("Node %s: ignoring duplicate RREQ.\n", r.ownerID)
 		return
 	}
 	r.seenMsgIDs[msg.GetID()] = true
@@ -139,13 +150,13 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.
 	// if I'm the destination, send RREP
 	if r.ownerID == ctrl.Destination {
 		log.Printf("Node %s: RREQ arrived at destination.\n", r.ownerID)
-		r.sendRREP(net, node, ctrl.Source, ctrl.Destination, 0)
+		r.sendRREP(net, node, ctrl.Source, ctrl.Destination, 0) // Should this reset to 0 (yes)
 		return
 	}
 
 	// If we have a route to the destination, we can send RREP
 	if route, ok := r.routeTable[ctrl.Destination]; ok {
-		r.sendRREP(net, node, ctrl.Source, ctrl.Destination, route.HopCount+1)
+		r.sendRREP(net, node, ctrl.Source, ctrl.Destination, route.HopCount)
 		return
 	}
 
@@ -159,6 +170,7 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.
 		ID:      msg.GetID(),
 		Payload: string(newPayload),
 	}
+	log.Printf("[RREQ FORWARD] Node %s: forwarding RREQ for %s (hop count %d)\n", r.ownerID, ctrl.Destination, ctrl.HopCount)
 	net.BroadcastMessage(fwdMsg, node)
 }
 
@@ -183,6 +195,7 @@ func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, source, destin
 		ID:      fmt.Sprintf("rrep-%s-%s-%d", destination, source, time.Now().UnixNano()),
 		Payload: string(bytes),
 	}
+	log.Printf("[RREP] Node %s: sending RREP to %s via %s current hop count: %d\n", r.ownerID, source, reverseRoute.NextHop, hopCount)
 	net.UnicastMessage(rrepMsg, node)
 }
 
@@ -222,6 +235,7 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, msg message.
 		ID:      msg.GetID(),
 		Payload: string(bytes),
 	}
+	log.Printf("[RREP FORWARD] Node %s: forwarding RREP to %s via %s\n", r.ownerID, ctrl.Destination, reverseRoute.NextHop)
 	net.UnicastMessage(fwdRrep, node)
 }
 

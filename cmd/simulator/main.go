@@ -34,7 +34,8 @@ func main() {
 		log.SetOutput(multiWriter)
 	
 		
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
+		// log.SetFlags(log.LstdFlags | log.Lshortfile)
+		log.SetFlags(0)
 	
 		// Log start of simulation
 		log.Println("Starting simulation...")
@@ -112,16 +113,30 @@ func simulationV2() {
 	// Sleep so they can broadcast HELLO and find each other
 	time.Sleep(2 * time.Second)
 
-	// Now let's test multi-hop. A wants to send data to C
-	log.Println("NodeA -> NodeC: sending data! -> setting up route")
-	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to C")
+	log.Println()
+	log.Println()
+	log.Println()
+	log.Println()
 
+	// nodeB.SendData(netw, nodeD.GetID(), "Hello from B to D")
+	// time.Sleep(10 * time.Second)
+
+
+	
+	log.Println()
+	log.Println()
+	log.Println()
+	log.Println()
+	// Now let's test multi-hop. A wants to send data to C
+	log.Println("NodeA -> NodeD: sending data! -> setting up route")
+	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to D")
+	
 	time.Sleep(10 * time.Second)
+	log.Println()
+	log.Println()
 
 	// Have to send message twice as first time is used to discover route -> to be fixed
-	log.Println("NodeA -> NodeC: sending data!")
-	log.Println("NodeA iD: ", nodeA.GetID())
-	log.Println("NodeD iD: ", nodeD.GetID())
+	log.Println("NodeA -> NodeD: sending data!")
 	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to D")
 
 	// Let the route discovery / data forwarding happen
@@ -131,5 +146,6 @@ func simulationV2() {
 	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
 	netw.Leave(nodeC.GetID())
+	netw.Leave(nodeD.GetID())
 	time.Sleep(1 * time.Second)
 }

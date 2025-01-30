@@ -189,6 +189,13 @@ func (n *nodeImpl) PrintNodeDetails() {
 		fmt.Printf("    - %s\n", neighborID)
 	}
 	n.muNeighbors.RUnlock()
+	fmt.Println("  Router:")
+	fmt.Printf("    - %T\n", n.router)
+	// print out routing table
+	fmt.Println("  Routing Table:")
+	r := n.router.(*routing.AODVRouter)
+	r.PrintRoutingTable()
+
 	fmt.Println("====================================")
 }
 

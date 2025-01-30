@@ -15,4 +15,7 @@ type IRouter interface {
 
     // The node notifies the router that "dest" is a direct neighbor
     AddDirectNeighbor(nodeID, neighborID uuid.UUID)
+
+    // print out the routing table
+    PrintRoutingTable()
 }
