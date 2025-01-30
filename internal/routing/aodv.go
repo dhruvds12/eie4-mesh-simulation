@@ -118,6 +118,7 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 	}
 	bytes, _ := json.Marshal(ctrl)
 
+	// Create a unique broadcast ID
 	broadcastID := fmt.Sprintf("rreq-%s-%d", r.ownerID, time.Now().UnixNano())
 	// Save the broadcast ID in the saw list to avoid responding to own RREQ
 	r.seenMsgIDs[broadcastID] = true
@@ -125,7 +126,7 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 		Type:    message.MsgRREQ,
 		From:    r.ownerID,
 		To:      uuid.MustParse(message.BroadcastID),
-		ID:      broadcastID, //TODO: this should be unique
+		ID:      broadcastID,
 		Payload: string(bytes),
 	}
 	log.Printf("[RREQ init] Node %s (router) -> initiating RREQ for %s (hop count %d)\n", r.ownerID, destID, 0)
@@ -247,7 +248,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 		return
 	}
 
-	//TODO: Could this just call SendData?
+	//TODO: Could this call SendData?
 
 	// Otherwise, I should forward it if I have a route
 	originID := msg.GetFrom()
