@@ -6,12 +6,18 @@ import "github.com/google/uuid"
 // MessageType is a string representing different message categories.
 type MessageType string
 
+
+
 const (
 	MsgHello    MessageType = "HELLO"
 	MsgHelloAck MessageType = "HELLO_ACK"
 	MsgData     MessageType = "DATA"
 
 	BroadcastID = "00000000-0000-0000-0000-000000000000"
+
+	// Routing messages
+	MsgRREQ MessageType = "RREQ"
+    MsgRREP MessageType = "RREP"
 )
 
 // Message is a simple struct implementing IMessage.
@@ -19,6 +25,7 @@ type Message struct {
 	Type    MessageType
 	From    uuid.UUID
 	To      uuid.UUID
+	Dest	uuid.UUID
 	ID      string
 	Payload string
 }
@@ -46,4 +53,9 @@ func (m *Message) GetID() string {
 // GetPayload returns the payload string.
 func (m *Message) GetPayload() string {
 	return m.Payload
+}
+
+// GetDest returns the destination ID.
+func (m *Message) GetDest() uuid.UUID {
+	return m.Dest
 }

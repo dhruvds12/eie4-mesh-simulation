@@ -4,7 +4,9 @@ import (
 	"mesh-simulation/internal/message"
 
 	"github.com/google/uuid"
+
 )
+
 
 type INetwork interface {
 	Run()

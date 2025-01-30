@@ -8,4 +8,5 @@ type IMessage interface {
 	GetTo() uuid.UUID
 	GetID() string
 	GetPayload() string
+	GetDest() uuid.UUID
 }

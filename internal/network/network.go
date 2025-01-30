@@ -1,7 +1,7 @@
 package network
 
 import (
-	"fmt"
+	"log"
 	"sync"
 
 	"mesh-simulation/internal/mesh"
@@ -67,7 +67,7 @@ func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode
 			ndChan := net.getNodeChannel(nd)
 			ndChan <- msg
 		} else {
-			fmt.Printf("[Network] Node %q is out of range for broadcast.\n", id)
+			log.Printf("[Network] Node %q is out of range for broadcast.\n", id)
 		}
 	}
 }
@@ -83,11 +83,11 @@ func (net *networkImpl) UnicastMessage(msg message.IMessage, sender mesh.INode) 
 			ndChan := net.getNodeChannel(receiver)
 			ndChan <- msg
 		} else {
-			fmt.Printf("[Network] Node %q is out of range for node %q.\n",
+			log.Printf("[Network] Node %q is out of range for node %q.\n",
 				sender.GetID(), to)
 		}
 	} else {
-		fmt.Printf("[Network] Node %q tried to send to unknown node %q.\n",
+		log.Printf("[Network] Node %q tried to send to unknown node %q.\n",
 			sender.GetID(), to)
 	}
 }
@@ -98,6 +98,7 @@ func (net *networkImpl) addNode(n mesh.INode) {
 	net.nodes[n.GetID()] = n
 	net.mu.Unlock()
 
+	log.Printf("[sim] Node %s: joining network.\n", n.GetID())
 	go n.Run(net)
 
 	// Broadcast a HELLO so new node can discover neighbors.
@@ -114,7 +115,7 @@ func (net *networkImpl) removeNode(nodeID uuid.UUID) {
 			close(ni.QuitChan())
 		}
 		// Print out the details of the leavign node
-		fmt.Printf("Node %s: leaving network.\n", nodeID)
+		log.Printf("[sim] Node %s: leaving network.\n", nodeID)
 		net.nodes[nodeID].PrintNodeDetails()
 		// Remove the node from the map
 		delete(net.nodes, nodeID)
