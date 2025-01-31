@@ -49,7 +49,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 	entry, hasRoute := r.routeTable[destID]
 	if !hasRoute {
 		// Initiate RREQ
-		log.Printf("Node %s (router) -> no route for %s, initiating RREQ.\n", r.ownerID, destID)
+		log.Printf("[sim] Node %s (router) -> no route for %s, initiating RREQ.\n", r.ownerID, destID)
 		r.initiateRREQ(net, sender, destID)
 		return
 	}
@@ -129,7 +129,7 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 		ID:      broadcastID,
 		Payload: string(bytes),
 	}
-	log.Printf("[RREQ init] Node %s (router) -> initiating RREQ for %s (hop count %d)\n", r.ownerID, destID, 0)
+	log.Printf("[sim] [RREQ init] Node %s (router) -> initiating RREQ for %s (hop count %d)\n", r.ownerID, destID, 0)
 	net.BroadcastMessage(rreqMsg, sender)
 }
 
@@ -150,7 +150,7 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.
 
 	// if I'm the destination, send RREP
 	if r.ownerID == ctrl.Destination {
-		log.Printf("Node %s: RREQ arrived at destination.\n", r.ownerID)
+		log.Printf("[sim] Node %s: RREQ arrived at destination.\n", r.ownerID)
 		r.sendRREP(net, node, ctrl.Source, ctrl.Destination, 0) // Should this reset to 0 (yes)
 		return
 	}
@@ -171,7 +171,7 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.
 		ID:      msg.GetID(),
 		Payload: string(newPayload),
 	}
-	log.Printf("[RREQ FORWARD] Node %s: forwarding RREQ for %s (hop count %d)\n", r.ownerID, ctrl.Destination, ctrl.HopCount)
+	log.Printf("[sim] [RREQ FORWARD] Node %s: forwarding RREQ for %s (hop count %d)\n", r.ownerID, ctrl.Destination, ctrl.HopCount)
 	net.BroadcastMessage(fwdMsg, node)
 }
 
@@ -196,7 +196,7 @@ func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, source, destin
 		ID:      fmt.Sprintf("rrep-%s-%s-%d", destination, source, time.Now().UnixNano()),
 		Payload: string(bytes),
 	}
-	log.Printf("[RREP] Node %s: sending RREP to %s via %s current hop count: %d\n", r.ownerID, source, reverseRoute.NextHop, hopCount)
+	log.Printf("[sim] [RREP] Node %s: sending RREP to %s via %s current hop count: %d\n", r.ownerID, source, reverseRoute.NextHop, hopCount)
 	net.UnicastMessage(rrepMsg, node)
 }
 
