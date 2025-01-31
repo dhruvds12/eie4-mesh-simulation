@@ -31,6 +31,7 @@ type AODVRouter struct {
 	ownerID    uuid.UUID
 	routeTable map[uuid.UUID]*RouteEntry // key = destination ID
 	seenMsgIDs map[string]bool           // deduplicate RREQ/RREP
+	dataQueue map[uuid.UUID][]string 	// queue of data to send after route is established
 }
 
 // NewAODVRouter constructs a router for a specific node
@@ -39,6 +40,7 @@ func NewAODVRouter(ownerID uuid.UUID) *AODVRouter {
 		ownerID:    ownerID,
 		routeTable: make(map[uuid.UUID]*RouteEntry),
 		seenMsgIDs: make(map[string]bool),
+		dataQueue: make(map[uuid.UUID][]string),
 	}
 }
 
@@ -50,6 +52,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 	if !hasRoute {
 		// Initiate RREQ
 		log.Printf("[sim] Node %s (router) -> no route for %s, initiating RREQ.\n", r.ownerID, destID)
+		r.dataQueue[destID] = append(r.dataQueue[destID], payload)
 		r.initiateRREQ(net, sender, destID)
 		return
 	}
@@ -217,6 +220,11 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, msg message.
 	// if I'm the original route requester, done
 	if r.ownerID == ctrl.Destination {
 		log.Printf("Node %s: route to %s established!\n", r.ownerID, ctrl.Source)
+		// send any queued data
+		for _, payload := range r.dataQueue[ctrl.Source] {
+			r.SendData(net, node, ctrl.Source, payload)
+		}
+		delete(r.dataQueue, ctrl.Source)
 		return
 	}
 

@@ -87,7 +87,7 @@ func (net *networkImpl) UnicastMessage(msg message.IMessage, sender mesh.INode) 
 				sender.GetID(), to)
 		}
 	} else {
-		log.Printf("[Network] Node %q tried to send to unknown node %q.\n",
+		log.Printf("[Network] Node %q tried to send to unknown node %q. Continuing anyway...\n",
 			sender.GetID(), to)
 	}
 }
