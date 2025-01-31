@@ -12,6 +12,13 @@ import (
 	"github.com/google/uuid"
 )
 
+/*
+TODO:
+- Implement a timeout for routes
+-Implement an ack for data packets (check what meshtastic does)
+-Implement RERR (route error) messages when route is broken 
+*/
+
 // AODVControl is extra data for RREQ/RREP
 type AODVControl struct {
 	Source      uuid.UUID
@@ -38,7 +45,7 @@ type AODVRouter struct {
 func NewAODVRouter(ownerID uuid.UUID) *AODVRouter {
 	return &AODVRouter{
 		ownerID:    ownerID,
-		routeTable: make(map[uuid.UUID]*RouteEntry),
+		routeTable: make(map[uuid.UUID]*RouteEntry), // TODO: implement a timeout for routes
 		seenMsgIDs: make(map[string]bool),
 		dataQueue: make(map[uuid.UUID][]string),
 	}
