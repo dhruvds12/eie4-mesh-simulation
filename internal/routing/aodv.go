@@ -98,7 +98,7 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
                     delete(r.pendingTxs, msgID)
 
 					// Invalidate routes
-					r.InvalidateRoutes(tx.PotentialBrokenNode)
+					r.InvalidateRoutes(tx.PotentialBrokenNode,tx.Dest, uuid.Nil )
 
                     route, found := r.routeTable[tx.Origin]
                     if found {
@@ -395,7 +395,7 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, msg message.
     log.Printf("[sim] Node %s: received RERR => broken node: %s for dest %s\n", r.ownerID, rc.BrokenNode, rc.MessageDest)
 
 	// Invalidate routes
-	r.InvalidateRoutes(rc.BrokenNode)
+	r.InvalidateRoutes(rc.BrokenNode, rc.MessageDest, msg.GetFrom())
 
 	if r.ownerID != msg.GetTo() {
 		// Check if node is the intended target
@@ -499,7 +499,17 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 
 }
 
-func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID) {
+func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID, dest uuid.UUID, sender uuid.UUID) {
+	// remove route to destination node if it goes through the sender
+	if sender != uuid.Nil {
+		if route, ok := r.routeTable[dest]; ok {
+			if route.NextHop == sender {
+				log.Printf("Node %s: removing route to %s because it goes through broken node %s.\n", r.ownerID, dest, sender)
+				delete(r.routeTable, dest)
+			}
+		}
+	}
+
     // Remove any direct route to the broken node.
     if _, ok := r.routeTable[brokenNode]; ok {
         log.Printf("Node %s: removing direct route to broken node %s.\n", r.ownerID, brokenNode)
