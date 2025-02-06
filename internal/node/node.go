@@ -52,11 +52,18 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 	log.Printf("Node %s: started.\n", n.id)
 	defer log.Printf("Node %s: stopped.\n", n.id)
 
+	if aodv, ok := n.router.(*routing.AODVRouter); ok {
+		aodv.StartPendingTxChecker(net, n)
+	}
+
 	for {
 		select {
 		case msg := <-n.messages:
 			n.HandleMessage(net, msg)
 		case <-n.quit:
+			if aodv, ok := n.router.(*routing.AODVRouter); ok {
+				aodv.StopPendingTxChecker()
+			}
 			return
 		}
 	}
@@ -113,11 +120,7 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 		n.neighbors[msg.GetFrom()] = true
 		n.router.AddDirectNeighbor(n.id, msg.GetFrom())
 		n.muNeighbors.Unlock()
-	case message.MsgData:
-		// log.Printf("Node %s: received DATA from %s, payload=%q\n",
-		// n.id, msg.GetFrom(), msg.GetPayload())
-		n.router.HandleMessage(net, n, msg)
-	case message.MsgRREQ, message.MsgRREP:
+	case message.MsgData, message.MsgRREP, message.MsgRREQ, message.MsgRERR, message.DataAck:
 		n.router.HandleMessage(net, n, msg)
 	default:
 		log.Printf("Node %s: unknown message type from %s\n", n.id, msg.GetFrom())

@@ -12,18 +12,21 @@ const (
 	MsgHello    MessageType = "HELLO"
 	MsgHelloAck MessageType = "HELLO_ACK"
 	MsgData     MessageType = "DATA"
+	DataAck	    MessageType = "DATA_ACK"
 
 	BroadcastID = "00000000-0000-0000-0000-000000000000"
 
 	// Routing messages
 	MsgRREQ MessageType = "RREQ"
     MsgRREP MessageType = "RREP"
+	MsgRERR MessageType = "RERR"
 )
 
 // Message is a simple struct implementing IMessage.
 type Message struct {
 	Type    MessageType
 	From    uuid.UUID
+	Origin    uuid.UUID
 	To      uuid.UUID
 	Dest	uuid.UUID
 	ID      string
@@ -59,3 +62,9 @@ func (m *Message) GetPayload() string {
 func (m *Message) GetDest() uuid.UUID {
 	return m.Dest
 }
+
+// GetOrigin returns the origin ID.
+func (m *Message) GetOrigin() uuid.UUID {
+	return m.Origin
+}
+

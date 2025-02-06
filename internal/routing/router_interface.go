@@ -18,4 +18,10 @@ type IRouter interface {
 
     // print out the routing table
     PrintRoutingTable()
+
+    // Start the router's Tx check go routine
+    StartPendingTxChecker(net mesh.INetwork, node mesh.INode)
+
+    // Stop the router's Tx check go routine
+    StopPendingTxChecker()
 }

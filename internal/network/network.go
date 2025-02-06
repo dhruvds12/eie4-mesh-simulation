@@ -66,8 +66,9 @@ func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode
 		if net.IsInRange(sender, nd) {
 			ndChan := net.getNodeChannel(nd)
 			ndChan <- msg
+			log.Printf("[Network] Node %q is IN range for broadcast.\n", id)
 		} else {
-			log.Printf("[Network] Node %q is out of range for broadcast.\n", id)
+			log.Printf("[Network] Node %q is OUT of range for broadcast.\n", id)
 		}
 	}
 }
@@ -87,7 +88,7 @@ func (net *networkImpl) UnicastMessage(msg message.IMessage, sender mesh.INode) 
 				sender.GetID(), to)
 		}
 	} else {
-		log.Printf("[Network] Node %q tried to send to unknown node %q.\n",
+		log.Printf("[Network] Node %q tried to send to unknown node %q. Continuing anyway...\n",
 			sender.GetID(), to)
 	}
 }
@@ -97,6 +98,8 @@ func (net *networkImpl) addNode(n mesh.INode) {
 	net.mu.Lock()
 	net.nodes[n.GetID()] = n
 	net.mu.Unlock()
+
+
 
 	log.Printf("[sim] Node %s: joining network.\n", n.GetID())
 	go n.Run(net)
