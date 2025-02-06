@@ -120,7 +120,7 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 		n.neighbors[msg.GetFrom()] = true
 		n.router.AddDirectNeighbor(n.id, msg.GetFrom())
 		n.muNeighbors.Unlock()
-	case message.MsgData, message.MsgRREP, message.MsgRREQ, message.MsgRERR:
+	case message.MsgData, message.MsgRREP, message.MsgRREQ, message.MsgRERR, message.DataAck:
 		n.router.HandleMessage(net, n, msg)
 	default:
 		log.Printf("Node %s: unknown message type from %s\n", n.id, msg.GetFrom())

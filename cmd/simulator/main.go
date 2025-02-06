@@ -132,10 +132,10 @@ func simulationV2() {
 	log.Println()
 	log.Println()
 
-	netw.Leave(nodeC.GetID())
-	log.Println()
-	log.Println()
+	netw.Leave(nodeD.GetID())
 	time.Sleep(5 * time.Second)
+	log.Println()
+	log.Println()
 
 	// Have to send message twice as first time is used to discover route -> to be fixed
 	// log.Println("NodeA -> NodeD: sending data!")
@@ -147,8 +147,8 @@ func simulationV2() {
 	log.Println("Shutting down.")
 	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
-	// netw.Leave(nodeC.GetID())
-	netw.Leave(nodeD.GetID())
+	netw.Leave(nodeC.GetID())
+	// netw.Leave(nodeD.GetID())
 	time.Sleep(1 * time.Second)
 
 	// TODO: This test case pases because the final node is not expected to ack the message -> to be fixed

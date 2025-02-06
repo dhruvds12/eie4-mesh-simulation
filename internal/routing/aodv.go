@@ -49,6 +49,10 @@ type PendingTx struct {
     ExpiryTime  time.Time 
 }
 
+type DataAckPayload struct {
+	MsgID string
+}
+
 // AODVRouter is a per-node router
 type AODVRouter struct {
 	ownerID    uuid.UUID
@@ -177,6 +181,12 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, msg messa
 	case message.MsgRERR:
 		// All nodes who recieve should handle
 		r.handleRERR(net, node, msg)
+	case message.DataAck:
+		// Only the intended recipient should handle
+		if msg.GetTo() == r.ownerID {
+			log.Printf("Node %s: received DATA_ACK\n", r.ownerID)
+			r.HandleDataAck(msg)
+		}
 	case message.MsgData:
 		// Overhearing logic for implicit ACKs
 		if pt, ok := r.pendingTxs[msg.GetID()]; ok && pt.PotentialBrokenNode == msg.GetFrom() {
@@ -376,6 +386,8 @@ func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uuid.UUID, 
         ID:      msgID,
         Payload: string(j),
     }
+	// add to seen messages
+	
     log.Printf("[sim] Node %s: sending RERR to %s about broken route for %s.\n", r.ownerID, to, dataDest)
     net.BroadcastMessage(rerrMsg, node)
 }
@@ -447,7 +459,8 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 	if msg.GetDest() == r.ownerID {
 		log.Printf("[sim] Node %s: DATA arrived. Payload = %q\n", r.ownerID, msg.GetPayload())
 		// Send an ACK back to the sender
-		// r.sendDataAck(net, node, msg.GetFrom())
+		// TODO: this is a simplification as this should depend on the packet header 
+		r.sendDataAck(net, node, msg.GetFrom(), msg.GetID())
 		return
 	}
 
@@ -483,7 +496,15 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
 	if route.NextHop == dest {
 		// log.Printf("{Implicit ACK} Node %s: overheard forward from %s => implicit ack for msgID=%s", r.ownerID, originID, msg.GetID())
-		// TODO: need to wait for an explicit ACK in the future
+		// TODO: need to wait for an explicit ACK request from sender (simplified)
+		expire := time.Now().Add(3 * time.Second) // e.g. 3s
+		r.pendingTxs[msg.GetID()] = PendingTx{
+			MsgID: msg.GetID(),
+			Dest:  dest,
+			PotentialBrokenNode: route.NextHop,
+			Origin: msg.GetOrigin(),
+			ExpiryTime: expire,
+		}
 		return
 	}
 
@@ -497,6 +518,24 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 		ExpiryTime: expire,
 	}
 
+}
+
+// Handle Data ACKs, should remove from pendingTxs
+func (r *AODVRouter) HandleDataAck(msg message.IMessage) {
+	// Unpack the payload and remove from pendingTxs
+	payload := msg.GetPayload()
+	var ack DataAckPayload
+	if err := json.Unmarshal([]byte(payload), &ack); err != nil {
+		log.Printf("Node %s: failed to parse DATA_ACK payload: %v\n", r.ownerID, err)
+		return
+	}
+
+	// log.Printf("{ACK} Node %s: received ACK for msgID=%s\n", r.ownerID, ack.MsgID)
+
+	if _, ok := r.pendingTxs[ack.MsgID]; ok {
+		log.Printf("{ACK} Node %s: received ACK for msgID=%s\n", r.ownerID, ack.MsgID)
+		delete(r.pendingTxs, ack.MsgID)
+	}
 }
 
 func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID, dest uuid.UUID, sender uuid.UUID) {
@@ -525,15 +564,20 @@ func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID, dest uuid.UUID, send
 }
 
 // send ack for data packets
-func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, dest uuid.UUID) {
+func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uuid.UUID, prevMsgId string) {
+	payload := DataAckPayload{
+		MsgID: prevMsgId,
+	}
+
+	bytes, _ := json.Marshal(payload)
 	ackMsg := &message.Message{
 		Type:    message.DataAck,
 		From:    r.ownerID,
-		To:      dest,
-		ID:      fmt.Sprintf("ack-%s-%s-%d", r.ownerID, dest, time.Now().UnixNano()),
-		Payload: "ACK",
+		To:      to,
+		ID:      fmt.Sprintf("ack-%s-%s-%d", r.ownerID, to, time.Now().UnixNano()),
+		Payload: string(bytes),
 	}
-	log.Printf("[sim] Node %s: sending DATA_ACK to %s\n", r.ownerID, dest)
+	log.Printf("[sim] Node %s: sending DATA_ACK to %s\n", r.ownerID, to)
 	net.BroadcastMessage(ackMsg, node)
 }
 
