@@ -3,6 +3,7 @@ package network
 import (
 	"log"
 	"sync"
+	"time"
 
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
@@ -10,24 +11,38 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	maxRange = 1400.0             // Maximum range for direct comms
+	LoRaAirTime = 300 * time.Millisecond // how long a single broadcast is on-air
+)
+
+// Struct to hold the transmission details
+type Transmission struct {
+	Msg message.IMessage
+	Sender mesh.INode
+	StartTime time.Time
+	EndTime time.Time
+	Collided bool
+}
+
 type networkImpl struct {
 	mu    sync.RWMutex
 	nodes map[uuid.UUID]mesh.INode
 
 	joinRequests  chan mesh.INode
 	leaveRequests chan uuid.UUID
+
+	transmissions map[string]*Transmission
 }
 
-const (
-	maxRange = 1400.0 // Maximum range for a node to communicate with another
-)
 
 // NewNetwork creates a new instance of the network.
 func NewNetwork() mesh.INetwork {
 	return &networkImpl{
-		nodes:         make(map[uuid.UUID]mesh.INode),
+		nodes:         make(map[uuid.UUID]mesh.INode), // Potentially need to change to a pointer 
 		joinRequests:  make(chan mesh.INode),
 		leaveRequests: make(chan uuid.UUID),
+		transmissions: make(map[string]*Transmission),
 	}
 }
 
