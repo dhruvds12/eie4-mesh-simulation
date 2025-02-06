@@ -97,11 +97,8 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
                     // Remove from pendingTxs
                     delete(r.pendingTxs, msgID)
 
-                    // Optionally remove route
-					log.Printf("Node %s: removing route to %s due to timeout", r.ownerID, tx.Dest)
-					delete(r.routeTable, tx.PotentialBrokenNode)
-					// TODO: more items to delete 
-					// - ANY route that nextHop is the broken node
+					// Invalidate routes
+					r.InvalidateRoutes(tx.PotentialBrokenNode)
 
                     route, found := r.routeTable[tx.Origin]
                     if found {
@@ -397,19 +394,11 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, msg message.
 
     log.Printf("[sim] Node %s: received RERR => broken node: %s for dest %s\n", r.ownerID, rc.BrokenNode, rc.MessageDest)
 
-    // remove the route to rc.Dest if the nextHop is rc.BrokenNode
-    entry, ok := r.routeTable[rc.MessageDest]
-    if ok && entry.NextHop == msg.GetFrom(){
-        log.Printf("Node %s: removing route to %s because nextHop is broken.\n", r.ownerID, rc.MessageDest)
-        delete(r.routeTable, rc.MessageDest) // still incorrect 
-		// TODO: more items to delete
-		// - ANY route that nextHop is the broken node
-		// - Any route to the broken node needs to be removed
+	// Invalidate routes
+	r.InvalidateRoutes(rc.BrokenNode)
 
-    }
-
-	// Check if node is the intended target
 	if r.ownerID != msg.GetTo() {
+		// Check if node is the intended target
 		log.Printf("{RERR} Node %s: received RERR not intended for me.\n", r.ownerID)
 		return
 	}
@@ -422,7 +411,9 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, msg message.
 
 	entry, hasRoute := r.routeTable[rc.MessageSource]
 	if !hasRoute {
+		// No route to source, can't forward RERR 
 		log.Printf("[sim] {RERR FAIL} Node %s: no route to forward RERR destined for %s.\n", r.ownerID, rc.MessageSource)
+		// TODO: might need to initiate RREQ to source
 		return
 	}
 
@@ -506,6 +497,21 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 		ExpiryTime: expire,
 	}
 
+}
+
+func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID) {
+    // Remove any direct route to the broken node.
+    if _, ok := r.routeTable[brokenNode]; ok {
+        log.Printf("Node %s: removing direct route to broken node %s.\n", r.ownerID, brokenNode)
+        delete(r.routeTable, brokenNode)
+    }
+    // Iterate through the routing table.
+    for dest, route := range r.routeTable {
+        if route.NextHop == brokenNode {
+            log.Printf("Node %s: invalidating route to %s because NextHop %s is broken.\n", r.ownerID, dest, brokenNode)
+            delete(r.routeTable, dest)
+        }
+    }
 }
 
 // send ack for data packets
