@@ -69,23 +69,92 @@ func (net *networkImpl) Leave(nodeID uuid.UUID) {
 }
 
 // BroadcastMessage simulates a single broadcast transmission (fully connected).
-func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode) {
-	net.mu.RLock()
-	defer net.mu.RUnlock()
+// func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode) {
+// 	net.mu.RLock()
+// 	defer net.mu.RUnlock()
 
-	for id, nd := range net.nodes {
-		if id == sender.GetID() {
+// 	for id, nd := range net.nodes {
+// 		if id == sender.GetID() {
+// 			continue
+// 		}
+
+// 		if net.IsInRange(sender, nd) {
+// 			ndChan := net.getNodeChannel(nd)
+// 			ndChan <- msg
+// 			log.Printf("[Network] Node %q is IN range for broadcast.\n", id)
+// 		} else {
+// 			log.Printf("[Network] Node %q is OUT of range for broadcast.\n", id)
+// 		}
+// 	}
+// }
+
+// For collisions, we treat partial overlap as collision. 
+func timesOverlap(s1, e1, s2, e2 time.Time) bool {
+    return s1.Before(e2) && s2.Before(e1)
+}
+
+// If distance > 2*maxRange, no collision possible
+func sendersCanCollide(senderA, senderB mesh.INode) bool {
+    dist := senderA.GetPosition().DistanceTo(senderB.GetPosition())
+    return dist <= (maxRange * 2.0)
+}
+
+func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode) {
+	net.mu.Lock()
+	defer net.mu.Unlock()
+
+	start:= time.Now()
+	end:= start.Add(LoRaAirTime)
+
+	tx:= &Transmission{
+		Msg: msg,
+		Sender: sender,
+		StartTime: start,
+		EndTime: end,
+		Collided: false,
+	}
+
+	net.transmissions[msg.GetID()] = tx
+
+	for _, ongoing := range net.transmissions {
+		if ongoing == tx {
 			continue
 		}
-
-		if net.IsInRange(sender, nd) {
-			ndChan := net.getNodeChannel(nd)
-			ndChan <- msg
-			log.Printf("[Network] Node %q is IN range for broadcast.\n", id)
-		} else {
-			log.Printf("[Network] Node %q is OUT of range for broadcast.\n", id)
+		if timesOverlap(start, end, ongoing.StartTime, ongoing.EndTime) && sendersCanCollide(sender, ongoing.Sender) {
+			ongoing.Collided = true
+			tx.Collided = true
+			log.Printf("[Network] Collision detected between %s and %s\n", sender.GetID(), ongoing.Sender.GetID())
 		}
 	}
+
+	time.AfterFunc(LoRaAirTime, func() {
+		net.mu.Lock()
+		defer net.mu.Unlock()
+
+		delete(net.transmissions, msg.GetID())
+
+		if tx.Collided {
+			log.Printf("[Collision Drop] Message %s from node %s dropped.\n",
+			msg.GetID(), sender.GetID())
+			return
+		}
+
+		for id, nd := range net.nodes {
+			if id == sender.GetID() {
+				continue
+			}
+
+			if net.IsInRange(sender, nd) {
+				ndChan := net.getNodeChannel(nd)
+				ndChan <- msg
+				log.Printf("[Network] Node %q is IN range for broadcast.\n", id)
+			} else {
+				log.Printf("[Network] Node %q is OUT of range for broadcast.\n", id)
+			}
+		}
+	})
+
+
 }
 
 // UnicastMessage simulates a direct unicast from sender to msg.To().

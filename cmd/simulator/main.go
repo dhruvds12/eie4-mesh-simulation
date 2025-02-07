@@ -39,7 +39,7 @@ func main() {
 	// Log start of simulation
 	log.Println("Starting simulation...")
 
-	simulationV2()
+	simulationV3()
 
 }
 
@@ -168,24 +168,22 @@ func simulationV3() {
 	netw.Join(nodeC)
 	netw.Join(nodeD)
 
-	// Sleep so they can broadcast HELLO and find each other
-	time.Sleep(10 * time.Second)
-
-	netw.Leave(nodeA.GetID())
-
-	time.Sleep(4 * time.Second)
-
+	// Sleep so they can broadcast HELLO and find each other	
+	time.Sleep(5 * time.Second)
+	
 	log.Println()
 	log.Println("Node A ID is: ", nodeA.GetID())
 	log.Println()
-
-
-
-	nodeB.SendData(netw, nodeA.GetID(), "Hello from B to A")
-
+	
+	
+	
+	nodeD.SendData(netw, nodeA.GetID(), "Hello from D to A")
+	
 	time.Sleep(10 * time.Second)
-
+	
+	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
 	netw.Leave(nodeC.GetID())
 	netw.Leave(nodeD.GetID())
+	time.Sleep(1 * time.Second)
 }
