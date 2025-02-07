@@ -23,6 +23,7 @@ type Transmission struct {
 	StartTime time.Time
 	EndTime time.Time
 	Collided bool
+	Recipients []mesh.INode
 }
 
 type networkImpl struct {
@@ -99,62 +100,107 @@ func sendersCanCollide(senderA, senderB mesh.INode) bool {
     return dist <= (maxRange * 2.0)
 }
 
+// deliverIfNoCollision checks, for each recipient in tx.Recipients,
+// whether that node sees any overlapping transmissions. If so, the message is dropped
+// for that node; otherwise, the message is delivered.
+func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode) {
+	for _, nd := range tx.Recipients {
+		// re-check if the node is still in range (might have moving nodes in the future)
+		if !net.IsInRange(sender, nd) {
+			log.Printf("[Network] Node %s is no longer in range for msg %s.\n", nd.GetID(), tx.Msg.GetID())
+			continue
+		}
+
+		// Count overlapping transmissions that this recipient would hear.
+		overlappingCount := 0
+		for _, otherTx := range net.transmissions {
+			if otherTx == tx {
+				continue
+			}
+			// Check if the transmission intervals overlap.
+			if timesOverlap(tx.StartTime, tx.EndTime, otherTx.StartTime, otherTx.EndTime) {
+				// Check if this recipient is in range of the other transmitter.
+				if net.IsInRange(otherTx.Sender, nd) {
+					overlappingCount++
+				}
+			}
+		}
+		if overlappingCount > 0 {
+			log.Printf("[Collision] at node %s Skipping delivery of message %s due to %d overlapping transmission(s).\n",
+				nd.GetID(), tx.Msg.GetID(), overlappingCount)
+		} else {
+			nd.GetMessageChan() <- tx.Msg
+			log.Printf("[Network] Delivered message %s to node %s.\n", tx.Msg.GetID(), nd.GetID())
+		}
+	}
+}
+
+// BroadcastMessage simulates a broadcast transmission.
+// It pre-filters nodes that are in range of the sender and then schedules a callback
+// to deliver the message using deliverIfNoCollision.
 func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode) {
 	net.mu.Lock()
-	defer net.mu.Unlock()
 
-	start:= time.Now()
-	end:= start.Add(LoRaAirTime)
+	start := time.Now()
+	end := start.Add(LoRaAirTime)
 
-	tx:= &Transmission{
-		Msg: msg,
-		Sender: sender,
-		StartTime: start,
-		EndTime: end,
-		Collided: false,
+	// Pre-filter nodes: build a list of nodes that are in range of the sender at transmission start.
+	var recipients []mesh.INode
+	for id, nd := range net.nodes {
+		if id == sender.GetID() {
+			continue
+		}
+		if net.IsInRange(sender, nd) {
+			recipients = append(recipients, nd)
+			log.Printf("[Network] Node %q pre-filtered as recipient for msg %s.\n", id, msg.GetID())
+		}
 	}
 
+	// Create a transmission record.
+	tx := &Transmission{
+		Msg:        msg,
+		Sender:     sender,
+		StartTime:  start,
+		EndTime:    end,
+		Collided:   false,
+		Recipients: recipients,
+	}
+
+	// Store the transmission.
 	net.transmissions[msg.GetID()] = tx
 
+	// Check against ongoing transmissions to mark collisions.
 	for _, ongoing := range net.transmissions {
 		if ongoing == tx {
 			continue
 		}
-		if timesOverlap(start, end, ongoing.StartTime, ongoing.EndTime) && sendersCanCollide(sender, ongoing.Sender) {
+		if timesOverlap(start, end, ongoing.StartTime, ongoing.EndTime) &&
+			sendersCanCollide(sender, ongoing.Sender) {
 			ongoing.Collided = true
 			tx.Collided = true
-			log.Printf("[Network] Collision detected between %s and %s\n", sender.GetID(), ongoing.Sender.GetID())
+			log.Printf("[Network] Collision detected between sender %s and sender %s for msg %s.\n",
+				sender.GetID(), ongoing.Sender.GetID(), msg.GetID())
 		}
 	}
+	net.mu.Unlock()
 
+	// Schedule delivery after LoRaAirTime.
 	time.AfterFunc(LoRaAirTime, func() {
 		net.mu.Lock()
 		defer net.mu.Unlock()
 
+		// Remove the transmission record.
 		delete(net.transmissions, msg.GetID())
 
-		if tx.Collided {
-			log.Printf("[Collision Drop] Message %s from node %s dropped.\n",
-			msg.GetID(), sender.GetID())
-			return
-		}
+		// if tx.Collided {
+		// 	log.Printf("[Collision Drop] Message %s from node %s dropped due to collision.\n",
+		// 		msg.GetID(), sender.GetID())
+		// 	return
+		// }
 
-		for id, nd := range net.nodes {
-			if id == sender.GetID() {
-				continue
-			}
-
-			if net.IsInRange(sender, nd) {
-				ndChan := net.getNodeChannel(nd)
-				ndChan <- msg
-				log.Printf("[Network] Node %q is IN range for broadcast.\n", id)
-			} else {
-				log.Printf("[Network] Node %q is OUT of range for broadcast.\n", id)
-			}
-		}
+		// Deliver message using the pre-filtered recipients and a detailed collision check.
+		net.deliverIfNoCollision(tx, sender)
 	})
-
-
 }
 
 // UnicastMessage simulates a direct unicast from sender to msg.To().
