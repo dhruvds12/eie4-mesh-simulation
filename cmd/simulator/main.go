@@ -39,7 +39,7 @@ func main() {
 	// Log start of simulation
 	log.Println("Starting simulation...")
 
-	simulationV3()
+	simulationV4()
 
 }
 
@@ -159,9 +159,9 @@ func simulationV3() {
 	go netw.Run()
 
 	nodeA := node.NewNode(0, 0)
-	nodeB := node.NewNode(0, 1000)
 	nodeC := node.NewNode(0, 2000)
 	nodeD := node.NewNode(0, 3000)
+	nodeB := node.NewNode(0, 1000)
 
 	netw.Join(nodeA)
 	netw.Join(nodeB)
@@ -180,6 +180,45 @@ func simulationV3() {
 	nodeD.SendData(netw, nodeA.GetID(), "Hello from D to A")
 	
 	time.Sleep(10 * time.Second)
+	
+	netw.Leave(nodeA.GetID())
+	netw.Leave(nodeB.GetID())
+	netw.Leave(nodeC.GetID())
+	netw.Leave(nodeD.GetID())
+	time.Sleep(1 * time.Second)
+}
+
+
+func simulationV4() {
+	netw := network.NewNetwork()
+	go netw.Run()
+
+	nodeA := node.NewNode(0, 0)
+	nodeB := node.NewNode(0, 1000)
+	nodeC := node.NewNode(0, 2000)
+	nodeD := node.NewNode(0, 3000)
+	nodeE := node.NewNode(0, -1000)
+
+	netw.Join(nodeA)
+	netw.Join(nodeB)
+	netw.Join(nodeC)
+	netw.Join(nodeD)
+	netw.Join(nodeE)
+
+	// Sleep so they can broadcast HELLO and find each other	
+	time.Sleep(5 * time.Second)
+	
+	log.Println()
+	// log.Println("Node A ID is: ", nodeA.GetID())
+
+	log.Println()
+	
+	
+	
+	nodeA.SendData(netw, nodeE.GetID(), "Hello from A to E")
+	nodeC.SendData(netw, nodeB.GetID(), "Hello from C to B")
+	
+	time.Sleep(20 * time.Second)
 	
 	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
