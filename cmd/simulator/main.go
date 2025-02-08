@@ -218,7 +218,7 @@ func simulationV4() {
 	nodeA.SendData(netw, nodeE.GetID(), "Hello from A to E")
 	nodeC.SendData(netw, nodeB.GetID(), "Hello from C to B")
 	
-	time.Sleep(20 * time.Second)
+	time.Sleep(30 * time.Second)
 	
 	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
