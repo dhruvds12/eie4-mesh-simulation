@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
+
 
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
@@ -83,36 +83,37 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 
 // SendData is a convenience method calling into the router
 func (n *nodeImpl) SendData(net mesh.INetwork, destID uuid.UUID, payload string) {
-	n.router.SendData(net, n, destID, payload)
+	n.router.SendDataCSMA(net, n, destID, payload)
 }
 
 // BroadcastHello sends a HELLO broadcast announcing the node’s presence.
 func (n *nodeImpl) BroadcastHello(net mesh.INetwork) {
-	// Create a unique broadcast ID to deduplicate
-	broadcastID := fmt.Sprintf("hello-%s-%d", n.id, time.Now().UnixNano())
+	// // Create a unique broadcast ID to deduplicate
+	// broadcastID := fmt.Sprintf("hello-%s-%d", n.id, time.Now().UnixNano())
 
-	to, err := uuid.Parse(message.BroadcastID)
+	// to, err := uuid.Parse(message.BroadcastID)
 
-	if err != nil {
-		log.Fatalf("Node %s: failed to parse broadcast ID: %v", n.id, err)
+	// if err != nil {
+	// 	log.Fatalf("Node %s: failed to parse broadcast ID: %v", n.id, err)
 
-	}
+	// }
 
-	m := &message.Message{
-		Type:    message.MsgHello,
-		From:    n.id,
-		To:      to,
-		ID:      broadcastID,
-		Payload: fmt.Sprintf("Hello from %s", n.id),
-	}
-	net.BroadcastMessage(m, n)
+	// m := &message.Message{
+	// 	Type:    message.MsgHello,
+	// 	From:    n.id,
+	// 	To:      to,
+	// 	ID:      broadcastID,
+	// 	Payload: fmt.Sprintf("Hello from %s", n.id),
+	// }
+	// net.BroadcastMessage(m, n)
+	n.router.BroadcastHello(net, n)
 }
 
 // HandleMessage processes an incoming message.
 func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 	switch msg.GetType() {
 	case message.MsgHello:
-		n.handleHello(net, msg)
+		n.router.HandleMessage(net, n, msg)
 	case message.MsgHelloAck:
 		log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
 			n.id, msg.GetFrom(), msg.GetPayload())

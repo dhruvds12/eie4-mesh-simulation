@@ -10,11 +10,16 @@ import (
 type IRouter interface {
     // Called by the node to send data to destID
     SendData(net mesh.INetwork, sender mesh.INode, destID uuid.UUID, payload string)
+    // Called by the node to send data to destID using CSMA
+    SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID uuid.UUID, payload string)
     // Called by the node when it receives *any* message, so the router can process RREQ, RREP, or forward data
     HandleMessage(net mesh.INetwork, node mesh.INode, msg message.IMessage)
 
     // The node notifies the router that "dest" is a direct neighbor
     AddDirectNeighbor(nodeID, neighborID uuid.UUID)
+
+    // initial message to the network to broadcast a hello message
+    BroadcastHello(net mesh.INetwork, node mesh.INode)
 
     // print out the routing table
     PrintRoutingTable()

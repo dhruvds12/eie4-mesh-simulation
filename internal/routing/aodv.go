@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"time"
 
 	"mesh-simulation/internal/mesh"
@@ -16,7 +17,7 @@ import (
 TODO:
 - Implement a timeout for routes
 -Implement an ack for data packets (check what meshtastic does)
--Implement RERR (route error) messages when route is broken 
+-Implement RERR (route error) messages when route is broken
 */
 
 // AODVControl is extra data for RREQ/RREP
@@ -83,6 +84,8 @@ func (r *AODVRouter) StartPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 	go r.runPendingTxChecker(net, node)
 }
 
+// Checks if a transaction that has been sent has not been ACKed within a certain time
+// If not, the route is considered broken
 func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
     ticker := time.NewTicker(1 * time.Second) // check every 1s
     defer ticker.Stop()
@@ -156,7 +159,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 	log.Printf("[sim] Node %s (router) -> forwarding data to %s via %s\n", r.ownerID, destID, nextHop)
 	net.BroadcastMessage(dataMsg, sender)
 
-	expire := time.Now().Add(3 * time.Second) // e.g. 3s
+	expire := time.Now().Add(10 * time.Second) // e.g. 3s
 	r.pendingTxs[msgID] = PendingTx{
 		MsgID: msgID,
 		Dest:  destID,
@@ -166,10 +169,29 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 	}
 }
 
+func (r *AODVRouter) SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID uuid.UUID, payload string) {
+	backoff := 100 * time.Millisecond
+	// Check if the channel is busy
+	for !net.IsChannelFree(sender) {
+		waitTime := time.Duration(1+rand.Intn(int(backoff/time.Millisecond))) * time.Millisecond
+        log.Printf("[CSMA] Node %s: Channel busy. Waiting for %v before retrying.\n", r.ownerID, waitTime)
+        time.Sleep(waitTime)
+        backoff *= 2
+        if backoff > 2*time.Second {
+            backoff = 2 * time.Second
+        }
+    }
+	log.Printf("[CSMA] Node %s: Channel is free. Sending data.\n", r.ownerID)
+	r.SendData(net, sender, destID, payload)
+
+}
+
 // HandleMessage is called when the node receives any message
 // TODO: repeated logic should be removed?????
 func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, msg message.IMessage) {
 	switch msg.GetType() {
+	case message.MsgHello:
+		r.handleHello(net, msg, node)
 	case message.MsgRREQ:
 		// All nodes who recieve should handle
 		r.handleRREQ(net, node, msg)
@@ -230,7 +252,78 @@ func (r *AODVRouter) PrintRoutingTable() {
 	}
 }
 
+func (r *AODVRouter) BroadcastHello(net mesh.INetwork, node mesh.INode) {
+	nodeId := node.GetID()
+	// Create a unique broadcast ID to deduplicate
+	broadcastID := fmt.Sprintf("hello-%s-%d", nodeId, time.Now().UnixNano())
+
+	to, err := uuid.Parse(message.BroadcastID)
+
+	if err != nil {
+		log.Fatalf("Node %s: failed to parse broadcast ID: %v", nodeId, err)
+
+	}
+
+	m := &message.Message{
+		Type:    message.MsgHello,
+		From:    nodeId,
+		To:      to,
+		ID:      broadcastID,
+		Payload: fmt.Sprintf("Hello from %s", nodeId),
+	}
+	// net.BroadcastMessage(m, node)
+	r.broadcastMessageCSMA(net, node, m)
+}
+
+
 // -- Private AODV logic --
+// handleHello processes a HELLO broadcast message.
+func (r *AODVRouter) handleHello(net mesh.INetwork, msg message.IMessage, node mesh.INode) {
+	nodeID := node.GetID()
+	// Check for duplicate broadcasts
+	if r.seenMsgIDs[msg.GetID()] {
+		return
+	}
+	r.seenMsgIDs[msg.GetID()] = true
+
+	neighborID := msg.GetFrom()
+
+	log.Printf("[sim] Node %s: received HELLO from %s, payload=%q\n",
+	nodeID, neighborID, msg.GetPayload())
+
+	// Add the sender to the list of neighbors
+	r.AddDirectNeighbor(nodeID, msg.GetFrom())
+
+
+	// We won't re-broadcast to avoid infinite loops in a fully connected scenario.
+	// Instead, send a unicast HELLO_ACK back.
+	ack := &message.Message{
+		Type:    message.MsgHelloAck,
+		From:    nodeID,
+		To:      msg.GetFrom(),
+		ID:      "", // Not a broadcast
+		Payload: fmt.Sprintf("HelloAck from %s", nodeID),
+	}
+	net.UnicastMessage(ack, node)
+}
+
+// Check that channel is free before sending data to the network 
+// Will call the broadcast function in the network to send the message to all nodes
+func (r *AODVRouter) broadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, msg message.IMessage) {
+	backoff := 100 * time.Millisecond
+	// Check if the channel is busy
+	for !net.IsChannelFree(sender) {
+		waitTime := time.Duration(1+rand.Intn(int(backoff/time.Millisecond))) * time.Millisecond
+		log.Printf("[CSMA] Node %s: Channel busy. Waiting for %v before retrying.\n", r.ownerID, waitTime)
+		time.Sleep(waitTime)
+		backoff *= 2
+		if backoff > 2*time.Second {
+			backoff = 2 * time.Second
+		}
+	}
+	log.Printf("[CSMA] Node %s: Channel is free. Broadcasting message.\n", r.ownerID)
+	net.BroadcastMessage(msg, sender)
+}
 
 func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID uuid.UUID) {
 	ctrl := AODVControl{
@@ -252,7 +345,8 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 		Payload: string(bytes),
 	}
 	log.Printf("[sim] [RREQ init] Node %s (router) -> initiating RREQ for %s (hop count %d)\n", r.ownerID, destID, 0)
-	net.BroadcastMessage(rreqMsg, sender)
+	// net.BroadcastMessage(rreqMsg, sender)
+	r.broadcastMessageCSMA(net, sender, rreqMsg)
 }
 
 // Every Node needs to handle this 
@@ -295,7 +389,8 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.
 		Payload: string(newPayload),
 	}
 	log.Printf("[sim] [RREQ FORWARD] Node %s: forwarding RREQ for %s (hop count %d)\n", r.ownerID, ctrl.Destination, ctrl.HopCount)
-	net.BroadcastMessage(fwdMsg, node)
+	// net.BroadcastMessage(fwdMsg, node)
+	r.broadcastMessageCSMA(net, node, fwdMsg)
 }
 
 func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, source, destination uuid.UUID, hopCount int) {
@@ -320,7 +415,8 @@ func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, source, destin
 		Payload: string(bytes),
 	}
 	log.Printf("[sim] [RREP] Node %s: sending RREP to %s via %s current hop count: %d\n", r.ownerID, source, reverseRoute.NextHop, hopCount)
-	net.BroadcastMessage(rrepMsg, node)
+	// net.BroadcastMessage(rrepMsg, node)
+	r.broadcastMessageCSMA(net, node, rrepMsg)
 }
 
 // Only node specified in the RREP message should handle this
@@ -366,7 +462,8 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, msg message.
 		Payload: string(bytes),
 	}
 	log.Printf("[RREP FORWARD] Node %s: forwarding RREP to %s via %s\n", r.ownerID, ctrl.Destination, reverseRoute.NextHop)
-	net.BroadcastMessage(fwdRrep, node)
+	// net.BroadcastMessage(fwdRrep, node)
+	r.broadcastMessageCSMA(net, node, fwdRrep)
 }
 
 func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uuid.UUID, dataDest uuid.UUID, brokenNode uuid.UUID, messageId string, messageSource uuid.UUID) {
@@ -389,7 +486,8 @@ func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uuid.UUID, 
 	// add to seen messages
 	
     log.Printf("[sim] Node %s: sending RERR to %s about broken route for %s.\n", r.ownerID, to, dataDest)
-    net.BroadcastMessage(rerrMsg, node)
+    // net.BroadcastMessage(rerrMsg, node)
+	r.broadcastMessageCSMA(net, node, rerrMsg)
 }
 
 // Everyone who receives RERR should handle this (only intended recipient should forward to source) (source should not forward)
@@ -491,7 +589,8 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 		Payload: msg.GetPayload(),
 	}
 	log.Printf("[sim] Node %s: forwarding DATA from %s to %s via %s\n", r.ownerID, msg.GetFrom(), dest, route.NextHop)
-	net.BroadcastMessage(fwdMsg, node)
+	// net.BroadcastMessage(fwdMsg, node)
+	r.broadcastMessageCSMA(net, node, fwdMsg)
 
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
 	if route.NextHop == dest {

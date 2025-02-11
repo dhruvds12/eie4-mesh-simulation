@@ -276,3 +276,18 @@ func (net *networkImpl) getNodeChannel(n mesh.INode) chan message.IMessage {
 func (net *networkImpl) IsInRange(node1 mesh.INode, node2 mesh.INode) bool {
 	return node1.GetPosition().DistanceTo(node2.GetPosition()) <= maxRange
 }
+
+// Check if the channel if free for transmission
+// Checks each transmission in the map to see if the node is within range of any on going transmission
+// Used as part of CSMA/CA
+func (net *networkImpl) IsChannelFree(node mesh.INode) bool {
+	net.mu.RLock()
+	defer net.mu.RUnlock()
+	for _, tx := range net.transmissions {
+		if net.IsInRange(node, tx.Sender) {
+			return false
+		}
+	}
+	return true
+}
+
