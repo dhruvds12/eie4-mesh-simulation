@@ -39,7 +39,7 @@ func main() {
 	// Log start of simulation
 	log.Println("Starting simulation...")
 
-	simulationV5()
+	simulationV6()
 
 }
 
@@ -265,4 +265,35 @@ func simulationV5() {
 	netw.Leave(nodeD.GetID())
 	netw.Leave(nodeE.GetID())
 	time.Sleep(1 * time.Second)
+}
+
+func simulationV6() {
+	netw := network.NewNetwork()
+	go netw.Run()
+
+	x:= 0.0
+	y:= 0.0
+
+	for i := 0; i < 5; i++ {
+		nodeA := node.NewNode(x, y)
+		netw.Join(nodeA)
+		// if i % 2 == 0 {
+		// 	if i == 2 || i == 6 {
+		// 		x -= 1000
+		// 	} else {
+		// 		x += 1000
+		// 	}
+		// } else {
+		// 	y += 1000
+		// }
+	}
+
+
+	time.Sleep(120 * time.Second)
+	log.Println()
+	log.Println()
+	log.Println()
+	netw.LeaveAll()
+	time.Sleep(10* time.Second)
+
 }
