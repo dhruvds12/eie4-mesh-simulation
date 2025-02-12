@@ -120,6 +120,11 @@ func (net *networkImpl) Leave(nodeID uuid.UUID) {
 	net.leaveRequests <- nodeID
 }
 
+func (net *networkImpl) LeaveAll() {
+	for id := range net.nodes {
+		net.leaveRequests <- id
+	}
+}
 
 /// deliverIfNoCollision checks for each recipient in tx.Recipients whether that recipient
 // sees any overlapping transmission. If so, delivery is skipped for that node; otherwise, delivered.

@@ -15,4 +15,5 @@ type INetwork interface {
 	BroadcastMessage(msg message.IMessage, sender INode)
 	UnicastMessage(msg message.IMessage, sender INode)
 	IsChannelFree(node INode) bool
+	LeaveAll()
 }
