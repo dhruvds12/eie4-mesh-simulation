@@ -304,7 +304,8 @@ func (r *AODVRouter) handleHello(net mesh.INetwork, msg message.IMessage, node m
 		ID:      "", // Not a broadcast
 		Payload: fmt.Sprintf("HelloAck from %s", nodeID),
 	}
-	net.UnicastMessage(ack, node)
+	// net.UnicastMessage(ack, node)
+	r.broadcastMessageCSMA(net, node, ack)
 }
 
 // Check that channel is free before sending data to the network 

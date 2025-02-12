@@ -129,35 +129,35 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 }
 
 // handleHello processes a HELLO broadcast message.
-func (n *nodeImpl) handleHello(net mesh.INetwork, msg message.IMessage) {
-	// Check for duplicate broadcasts
-	if n.seenBroadcasts[msg.GetID()] {
-		return
-	}
-	n.seenBroadcasts[msg.GetID()] = true
+// func (n *nodeImpl) handleHello(net mesh.INetwork, msg message.IMessage) {
+// 	// Check for duplicate broadcasts
+// 	if n.seenBroadcasts[msg.GetID()] {
+// 		return
+// 	}
+// 	n.seenBroadcasts[msg.GetID()] = true
 
-	neighborID := msg.GetFrom()
+// 	neighborID := msg.GetFrom()
 
-	log.Printf("[sim] Node %s: received HELLO from %s, payload=%q\n",
-		n.id, neighborID, msg.GetPayload())
+// 	log.Printf("[sim] Node %s: received HELLO from %s, payload=%q\n",
+// 		n.id, neighborID, msg.GetPayload())
 
-	// Add the sender to the list of neighbors
-	n.muNeighbors.Lock()
-	n.neighbors[neighborID] = true
-	n.router.AddDirectNeighbor(n.id, msg.GetFrom())
-	n.muNeighbors.Unlock()
+// 	// Add the sender to the list of neighbors
+// 	n.muNeighbors.Lock()
+// 	n.neighbors[neighborID] = true
+// 	n.router.AddDirectNeighbor(n.id, msg.GetFrom())
+// 	n.muNeighbors.Unlock()
 
-	// We won't re-broadcast to avoid infinite loops in a fully connected scenario.
-	// Instead, send a unicast HELLO_ACK back.
-	ack := &message.Message{
-		Type:    message.MsgHelloAck,
-		From:    n.id,
-		To:      msg.GetFrom(),
-		ID:      "", // Not a broadcast
-		Payload: fmt.Sprintf("HelloAck from %s", n.id),
-	}
-	net.UnicastMessage(ack, n)
-}
+// 	// We won't re-broadcast to avoid infinite loops in a fully connected scenario.
+// 	// Instead, send a unicast HELLO_ACK back.
+// 	ack := &message.Message{
+// 		Type:    message.MsgHelloAck,
+// 		From:    n.id,
+// 		To:      msg.GetFrom(),
+// 		ID:      "", // Not a broadcast
+// 		Payload: fmt.Sprintf("HelloAck from %s", n.id),
+// 	}
+// 	net.UnicastMessage(ack, n)
+// }
 
 func (n *nodeImpl) GetMessageChan() chan message.IMessage {
 	return n.messages
