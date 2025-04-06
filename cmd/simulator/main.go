@@ -168,26 +168,23 @@ func simulationV3() {
 	netw.Join(nodeC)
 	netw.Join(nodeD)
 
-	// Sleep so they can broadcast HELLO and find each other	
+	// Sleep so they can broadcast HELLO and find each other
 	time.Sleep(5 * time.Second)
-	
+
 	log.Println()
 	log.Println("Node A ID is: ", nodeA.GetID())
 	log.Println()
-	
-	
-	
+
 	nodeD.SendData(netw, nodeA.GetID(), "Hello from D to A")
-	
+
 	time.Sleep(10 * time.Second)
-	
+
 	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
 	netw.Leave(nodeC.GetID())
 	netw.Leave(nodeD.GetID())
 	time.Sleep(1 * time.Second)
 }
-
 
 func simulationV4() {
 	netw := network.NewNetwork()
@@ -205,21 +202,19 @@ func simulationV4() {
 	netw.Join(nodeD)
 	netw.Join(nodeE)
 
-	// Sleep so they can broadcast HELLO and find each other	
+	// Sleep so they can broadcast HELLO and find each other
 	time.Sleep(5 * time.Second)
-	
+
 	log.Println()
 	// log.Println("Node A ID is: ", nodeA.GetID())
 
 	log.Println()
-	
-	
-	
+
 	nodeA.SendData(netw, nodeE.GetID(), "Hello from A to E")
 	nodeC.SendData(netw, nodeB.GetID(), "Hello from C to B")
-	
+
 	time.Sleep(30 * time.Second)
-	
+
 	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
 	netw.Leave(nodeC.GetID())
@@ -244,21 +239,19 @@ func simulationV5() {
 	netw.Join(nodeD)
 	netw.Join(nodeE)
 
-	// Sleep so they can broadcast HELLO and find each other	
+	// Sleep so they can broadcast HELLO and find each other
 	// time.Sleep(5 * time.Second)
-	
+
 	// log.Println()
 	// // log.Println("Node A ID is: ", nodeA.GetID())
 
 	// log.Println()
-	
-	
-	
+
 	// nodeA.SendData(netw, nodeE.GetID(), "Hello from A to E")
 	// nodeC.SendData(netw, nodeB.GetID(), "Hello from C to B")
-	
+
 	time.Sleep(30 * time.Second)
-	
+
 	netw.Leave(nodeA.GetID())
 	netw.Leave(nodeB.GetID())
 	netw.Leave(nodeC.GetID())
@@ -271,8 +264,8 @@ func simulationV6() {
 	netw := network.NewNetwork()
 	go netw.Run()
 
-	x:= 0.0
-	y:= 0.0
+	x := 0.0
+	y := 0.0
 
 	for i := 0; i < 5; i++ {
 		nodeA := node.NewNode(x, y)
@@ -288,12 +281,11 @@ func simulationV6() {
 		// }
 	}
 
-
 	time.Sleep(120 * time.Second)
 	log.Println()
 	log.Println()
 	log.Println()
 	netw.LeaveAll()
-	time.Sleep(10* time.Second)
+	time.Sleep(10 * time.Second)
 
 }

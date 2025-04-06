@@ -35,19 +35,19 @@ type RouteEntry struct {
 }
 
 type RERRControl struct {
-	BrokenNode uuid.UUID
-	MessageDest 	 uuid.UUID
-	MessageId string
+	BrokenNode    uuid.UUID
+	MessageDest   uuid.UUID
+	MessageId     string
 	MessageSource uuid.UUID
 }
 
 // Used to store transactions that are pending ACKs
 type PendingTx struct {
-    MsgID       string
-    Dest        uuid.UUID // destination of the data
-    PotentialBrokenNode     uuid.UUID // (the broken node)
-	Origin 	    uuid.UUID // original source of the data
-    ExpiryTime  time.Time 
+	MsgID               string
+	Dest                uuid.UUID // destination of the data
+	PotentialBrokenNode uuid.UUID // (the broken node)
+	Origin              uuid.UUID // original source of the data
+	ExpiryTime          time.Time
 }
 
 type DataAckPayload struct {
@@ -59,7 +59,7 @@ type AODVRouter struct {
 	ownerID    uuid.UUID
 	routeTable map[uuid.UUID]*RouteEntry // key = destination ID
 	seenMsgIDs map[string]bool           // deduplicate RREQ/RREP
-	dataQueue map[uuid.UUID][]string 	// queue of data to send after route is established
+	dataQueue  map[uuid.UUID][]string    // queue of data to send after route is established
 	pendingTxs map[string]PendingTx
 	quitChan   chan struct{}
 }
@@ -68,9 +68,9 @@ type AODVRouter struct {
 func NewAODVRouter(ownerID uuid.UUID) *AODVRouter {
 	return &AODVRouter{
 		ownerID:    ownerID,
-		routeTable: make(map[uuid.UUID]*RouteEntry), // TODO: implement a timeout for routes 
+		routeTable: make(map[uuid.UUID]*RouteEntry), // TODO: implement a timeout for routes
 		seenMsgIDs: make(map[string]bool),
-		dataQueue: make(map[uuid.UUID][]string),
+		dataQueue:  make(map[uuid.UUID][]string),
 		pendingTxs: make(map[string]PendingTx),
 		quitChan:   make(chan struct{}),
 	}
@@ -87,48 +87,46 @@ func (r *AODVRouter) StartPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 // Checks if a transaction that has been sent has not been ACKed within a certain time
 // If not, the route is considered broken
 func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
-    ticker := time.NewTicker(1 * time.Second) // check every 1s
-    defer ticker.Stop()
+	ticker := time.NewTicker(1 * time.Second) // check every 1s
+	defer ticker.Stop()
 
-    for {
-        select {
-        case <-r.quitChan:
-            return
-        case <-ticker.C:
-            now := time.Now()
-            for msgID, tx := range r.pendingTxs {
-                if now.After(tx.ExpiryTime) {
-                    log.Printf("[Timeout] Node %s: pendingTx expired for msgID=%s => route to %s is considered broken",
-                        r.ownerID, msgID, tx.Dest)
+	for {
+		select {
+		case <-r.quitChan:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			for msgID, tx := range r.pendingTxs {
+				if now.After(tx.ExpiryTime) {
+					log.Printf("[Timeout] Node %s: pendingTx expired for msgID=%s => route to %s is considered broken",
+						r.ownerID, msgID, tx.Dest)
 
-                    // Remove from pendingTxs
-                    delete(r.pendingTxs, msgID)
+					// Remove from pendingTxs
+					delete(r.pendingTxs, msgID)
 
 					// Invalidate routes
-					r.InvalidateRoutes(tx.PotentialBrokenNode,tx.Dest, uuid.Nil )
+					r.InvalidateRoutes(tx.PotentialBrokenNode, tx.Dest, uuid.Nil)
 
-                    route, found := r.routeTable[tx.Origin]
-                    if found {
+					route, found := r.routeTable[tx.Origin]
+					if found {
 
-                        // If we have net & node references, we can send RERR
-                        if net != nil && node != nil {
-                            // We'll craft a minimal sendRERR. We can guess the original source as r.ownerID,
-                            // or store it in PendingTx if you want the actual source
-                            r.sendRERR(net, node, route.NextHop, tx.Dest, tx.PotentialBrokenNode, msgID, tx.Origin)
-                        }
-                    }
-                }
-            }
-        }
-    }
+						// If we have net & node references, we can send RERR
+						if net != nil && node != nil {
+							// We'll craft a minimal sendRERR. We can guess the original source as r.ownerID,
+							// or store it in PendingTx if you want the actual source
+							r.sendRERR(net, node, route.NextHop, tx.Dest, tx.PotentialBrokenNode, msgID, tx.Origin)
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 // Stop the pendingTxChecker
 func (r *AODVRouter) StopPendingTxChecker() {
-    close(r.quitChan)
+	close(r.quitChan)
 }
-
-
 
 // -- IRouter methods --
 
@@ -144,7 +142,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 	}
 
 	// We have a route -> unicast data to NextHop
-	msgID:= fmt.Sprintf("data-%s-%s-%d", r.ownerID, destID, time.Now().UnixNano())
+	msgID := fmt.Sprintf("data-%s-%s-%d", r.ownerID, destID, time.Now().UnixNano())
 	nextHop := entry.NextHop
 	dataMsg := &message.Message{
 		Type:    message.MsgData,
@@ -161,11 +159,11 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 
 	expire := time.Now().Add(10 * time.Second) // e.g. 3s
 	r.pendingTxs[msgID] = PendingTx{
-		MsgID: msgID,
-		Dest:  destID,
+		MsgID:               msgID,
+		Dest:                destID,
 		PotentialBrokenNode: nextHop,
-		Origin: r.ownerID,
-		ExpiryTime: expire,
+		Origin:              r.ownerID,
+		ExpiryTime:          expire,
 	}
 }
 
@@ -174,13 +172,13 @@ func (r *AODVRouter) SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID u
 	// Check if the channel is busy
 	for !net.IsChannelFree(sender) {
 		waitTime := time.Duration(1+rand.Intn(int(backoff/time.Millisecond))) * time.Millisecond
-        log.Printf("[CSMA] Node %s: Channel busy. Waiting for %v before retrying.\n", r.ownerID, waitTime)
-        time.Sleep(waitTime)
-        backoff *= 2
-        if backoff > 2*time.Second {
-            backoff = 2 * time.Second
-        }
-    }
+		log.Printf("[CSMA] Node %s: Channel busy. Waiting for %v before retrying.\n", r.ownerID, waitTime)
+		time.Sleep(waitTime)
+		backoff *= 2
+		if backoff > 2*time.Second {
+			backoff = 2 * time.Second
+		}
+	}
 	log.Printf("[CSMA] Node %s: Channel is free. Sending data.\n", r.ownerID)
 	r.SendData(net, sender, destID, payload)
 
@@ -212,11 +210,11 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, msg messa
 	case message.MsgData:
 		// Overhearing logic for implicit ACKs
 		if pt, ok := r.pendingTxs[msg.GetID()]; ok && pt.PotentialBrokenNode == msg.GetFrom() {
-            // ack
-            log.Printf("{Implicit ACK}  Node %s: overheard forward from %s => implicit ack for msgID=%s", 
-                       r.ownerID, msg.GetFrom(), msg.GetID())
-            delete(r.pendingTxs, msg.GetID())
-        }
+			// ack
+			log.Printf("{Implicit ACK}  Node %s: overheard forward from %s => implicit ack for msgID=%s",
+				r.ownerID, msg.GetFrom(), msg.GetID())
+			delete(r.pendingTxs, msg.GetID())
+		}
 		// Only the intended recipient should handle
 		if msg.GetTo() == r.ownerID {
 			r.handleDataForward(net, node, msg)
@@ -275,7 +273,6 @@ func (r *AODVRouter) BroadcastHello(net mesh.INetwork, node mesh.INode) {
 	r.broadcastMessageCSMA(net, node, m)
 }
 
-
 // -- Private AODV logic --
 // handleHello processes a HELLO broadcast message.
 func (r *AODVRouter) handleHello(net mesh.INetwork, msg message.IMessage, node mesh.INode) {
@@ -289,11 +286,10 @@ func (r *AODVRouter) handleHello(net mesh.INetwork, msg message.IMessage, node m
 	neighborID := msg.GetFrom()
 
 	log.Printf("[sim] Node %s: received HELLO from %s, payload=%q\n",
-	nodeID, neighborID, msg.GetPayload())
+		nodeID, neighborID, msg.GetPayload())
 
 	// Add the sender to the list of neighbors
 	r.AddDirectNeighbor(nodeID, msg.GetFrom())
-
 
 	// We won't re-broadcast to avoid infinite loops in a fully connected scenario.
 	// Instead, send a unicast HELLO_ACK back.
@@ -308,7 +304,7 @@ func (r *AODVRouter) handleHello(net mesh.INetwork, msg message.IMessage, node m
 	r.broadcastMessageCSMA(net, node, ack)
 }
 
-// Check that channel is free before sending data to the network 
+// Check that channel is free before sending data to the network
 // Will call the broadcast function in the network to send the message to all nodes
 func (r *AODVRouter) broadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, msg message.IMessage) {
 	backoff := 100 * time.Millisecond
@@ -350,7 +346,7 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 	r.broadcastMessageCSMA(net, sender, rreqMsg)
 }
 
-// Every Node needs to handle this 
+// Every Node needs to handle this
 func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.IMessage) {
 	if r.seenMsgIDs[msg.GetID()] {
 		log.Printf("Node %s: ignoring duplicate RREQ.\n", r.ownerID)
@@ -468,42 +464,42 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, msg message.
 }
 
 func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uuid.UUID, dataDest uuid.UUID, brokenNode uuid.UUID, messageId string, messageSource uuid.UUID) {
-    rerr := RERRControl{
-        BrokenNode: brokenNode,
-        MessageDest:       dataDest,
-		MessageId: messageId,
+	rerr := RERRControl{
+		BrokenNode:    brokenNode,
+		MessageDest:   dataDest,
+		MessageId:     messageId,
 		MessageSource: messageSource,
-    }
-    j, _ := json.Marshal(rerr)
-    msgID := fmt.Sprintf("rerr-%s-%d", r.ownerID, time.Now().UnixNano())
-    r.seenMsgIDs[msgID] = true
-    rerrMsg := &message.Message{
-        Type:    message.MsgRERR,
-        From:    r.ownerID,
-        To:      to, // unicast to upstream node
-        ID:      msgID,
-        Payload: string(j),
-    }
+	}
+	j, _ := json.Marshal(rerr)
+	msgID := fmt.Sprintf("rerr-%s-%d", r.ownerID, time.Now().UnixNano())
+	r.seenMsgIDs[msgID] = true
+	rerrMsg := &message.Message{
+		Type:    message.MsgRERR,
+		From:    r.ownerID,
+		To:      to, // unicast to upstream node
+		ID:      msgID,
+		Payload: string(j),
+	}
 	// add to seen messages
-	
-    log.Printf("[sim] Node %s: sending RERR to %s about broken route for %s.\n", r.ownerID, to, dataDest)
-    // net.BroadcastMessage(rerrMsg, node)
+
+	log.Printf("[sim] Node %s: sending RERR to %s about broken route for %s.\n", r.ownerID, to, dataDest)
+	// net.BroadcastMessage(rerrMsg, node)
 	r.broadcastMessageCSMA(net, node, rerrMsg)
 }
 
 // Everyone who receives RERR should handle this (only intended recipient should forward to source) (source should not forward)
 func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, msg message.IMessage) {
-    if r.seenMsgIDs[msg.GetID()] {
-        return
-    }
-    r.seenMsgIDs[msg.GetID()] = true
+	if r.seenMsgIDs[msg.GetID()] {
+		return
+	}
+	r.seenMsgIDs[msg.GetID()] = true
 
-    var rc RERRControl
-    if err := json.Unmarshal([]byte(msg.GetPayload()), &rc); err != nil {
-        return
-    }
+	var rc RERRControl
+	if err := json.Unmarshal([]byte(msg.GetPayload()), &rc); err != nil {
+		return
+	}
 
-    log.Printf("[sim] Node %s: received RERR => broken node: %s for dest %s\n", r.ownerID, rc.BrokenNode, rc.MessageDest)
+	log.Printf("[sim] Node %s: received RERR => broken node: %s for dest %s\n", r.ownerID, rc.BrokenNode, rc.MessageDest)
 
 	// Invalidate routes
 	r.InvalidateRoutes(rc.BrokenNode, rc.MessageDest, msg.GetFrom())
@@ -519,10 +515,9 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, msg message.
 		return
 	}
 
-
 	entry, hasRoute := r.routeTable[rc.MessageSource]
 	if !hasRoute {
-		// No route to source, can't forward RERR 
+		// No route to source, can't forward RERR
 		log.Printf("[sim] {RERR FAIL} Node %s: no route to forward RERR destined for %s.\n", r.ownerID, rc.MessageSource)
 		// TODO: might need to initiate RREQ to source
 		return
@@ -535,21 +530,19 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, msg message.
 	// Message source is in the payload, use existing route to forward RERR
 	// This is a simplification, in real AODV we might need to store the "previous hop" for each route
 
+	// if I'm not the source, I forward RERR upstream
+	// how do we know who is the source? We might store it or check who gave me data originally
+	// For now, let's just forward to the route of rc.Dest's Source if we know it
+	// or we can store the msg.GetFrom() as the "previous hop" and forward there
+	// If I have a route to the original source of the data, we can forward
+	// This part can vary depending on how you track the "source" of data
 
+	// (Simplified) If we do want to forward RERR, we need to know the "previous hop".
+	// We might just do nothing if we don't store that.
+	// Real AODV would keep track of all active flows or have a route to the source.
 
-    // if I'm not the source, I forward RERR upstream
-    // how do we know who is the source? We might store it or check who gave me data originally
-    // For now, let's just forward to the route of rc.Dest's Source if we know it
-    // or we can store the msg.GetFrom() as the "previous hop" and forward there
-    // If I have a route to the original source of the data, we can forward
-    // This part can vary depending on how you track the "source" of data
-
-    // (Simplified) If we do want to forward RERR, we need to know the "previous hop".
-    // We might just do nothing if we don't store that. 
-    // Real AODV would keep track of all active flows or have a route to the source.
-
-    // if we are the original source, we might re-initiate RREQ. 
-    // But for simplicity, let's stop here.
+	// if we are the original source, we might re-initiate RREQ.
+	// But for simplicity, let's stop here.
 }
 
 // handleDataForward attempts to forward data if the node isn't the final dest
@@ -558,7 +551,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 	if msg.GetDest() == r.ownerID {
 		log.Printf("[sim] Node %s: DATA arrived. Payload = %q\n", r.ownerID, msg.GetPayload())
 		// Send an ACK back to the sender
-		// TODO: this is a simplification as this should depend on the packet header 
+		// TODO: this is a simplification as this should depend on the packet header
 		r.sendDataAck(net, node, msg.GetFrom(), msg.GetID())
 		return
 	}
@@ -566,7 +559,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 	//TODO: Could this call SendData?
 
 	// Otherwise, I should forward it if I have a route
-	
+
 	dest := msg.GetDest()
 	route, ok := r.routeTable[dest]
 	if !ok {
@@ -574,7 +567,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 		// No route, we might trigger route discovery or drop
 		log.Printf("[sim] Node %s: no route to forward DATA destined for %s.\n", r.ownerID, dest)
 		// Optionally: r.initiateRREQ(...)
-		// no route therefore, we need ot send RERR 
+		// no route therefore, we need ot send RERR
 		r.sendRERR(net, node, msg.GetFrom(), dest, r.ownerID, msg.GetID(), msg.GetOrigin())
 		return
 	}
@@ -599,11 +592,11 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 		// TODO: need to wait for an explicit ACK request from sender (simplified)
 		expire := time.Now().Add(3 * time.Second) // e.g. 3s
 		r.pendingTxs[msg.GetID()] = PendingTx{
-			MsgID: msg.GetID(),
-			Dest:  dest,
+			MsgID:               msg.GetID(),
+			Dest:                dest,
 			PotentialBrokenNode: route.NextHop,
-			Origin: msg.GetOrigin(),
-			ExpiryTime: expire,
+			Origin:              msg.GetOrigin(),
+			ExpiryTime:          expire,
 		}
 		return
 	}
@@ -611,11 +604,11 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 	// If the next hop is not the destination, we need to track the transaction by overhearing it
 	expire := time.Now().Add(3 * time.Second) // e.g. 3s
 	r.pendingTxs[msg.GetID()] = PendingTx{
-		MsgID: msg.GetID(),
-		Dest:  dest,
+		MsgID:               msg.GetID(),
+		Dest:                dest,
 		PotentialBrokenNode: route.NextHop,
-		Origin: msg.GetOrigin(),
-		ExpiryTime: expire,
+		Origin:              msg.GetOrigin(),
+		ExpiryTime:          expire,
 	}
 
 }
@@ -649,18 +642,18 @@ func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID, dest uuid.UUID, send
 		}
 	}
 
-    // Remove any direct route to the broken node.
-    if _, ok := r.routeTable[brokenNode]; ok {
-        log.Printf("Node %s: removing direct route to broken node %s.\n", r.ownerID, brokenNode)
-        delete(r.routeTable, brokenNode)
-    }
-    // Iterate through the routing table.
-    for dest, route := range r.routeTable {
-        if route.NextHop == brokenNode {
-            log.Printf("Node %s: invalidating route to %s because NextHop %s is broken.\n", r.ownerID, dest, brokenNode)
-            delete(r.routeTable, dest)
-        }
-    }
+	// Remove any direct route to the broken node.
+	if _, ok := r.routeTable[brokenNode]; ok {
+		log.Printf("Node %s: removing direct route to broken node %s.\n", r.ownerID, brokenNode)
+		delete(r.routeTable, brokenNode)
+	}
+	// Iterate through the routing table.
+	for dest, route := range r.routeTable {
+		if route.NextHop == brokenNode {
+			log.Printf("Node %s: invalidating route to %s because NextHop %s is broken.\n", r.ownerID, dest, brokenNode)
+			delete(r.routeTable, dest)
+		}
+	}
 }
 
 // send ack for data packets

@@ -5,7 +5,6 @@ import (
 	"log"
 	"sync"
 
-
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
 	"mesh-simulation/internal/routing"

@@ -12,19 +12,18 @@ import (
 )
 
 const (
-	maxRange          = 1400.0                   // Maximum range (meters)
-	LoRaAirTime       = 300 * time.Millisecond   // Duration a transmission is on air
-	PruneInterval     = 3 * time.Second          // How often to run the pruner
-	TransmissionGrace = 500 * time.Millisecond   // How long after end time to keep transmissions
+	maxRange          = 1400.0                 // Maximum range (meters)
+	LoRaAirTime       = 300 * time.Millisecond // Duration a transmission is on air
+	PruneInterval     = 3 * time.Second        // How often to run the pruner
+	TransmissionGrace = 500 * time.Millisecond // How long after end time to keep transmissions
 )
-
 
 // Struct to hold the transmission details
 type Transmission struct {
-	Msg message.IMessage
-	Sender mesh.INode
-	StartTime time.Time
-	EndTime time.Time
+	Msg        message.IMessage
+	Sender     mesh.INode
+	StartTime  time.Time
+	EndTime    time.Time
 	Recipients []mesh.INode
 }
 
@@ -50,7 +49,6 @@ type networkImpl struct {
 
 	quitPruner chan struct{}
 }
-
 
 // NewNetwork creates a new instance of the network.
 func NewNetwork() mesh.INetwork {
@@ -95,9 +93,6 @@ func (net *networkImpl) pruneTransmissions() {
 	}
 }
 
-
-
-
 // Run is the main goroutine for the network, handling joins/leaves.
 func (net *networkImpl) Run() {
 	for {
@@ -126,7 +121,7 @@ func (net *networkImpl) LeaveAll() {
 	}
 }
 
-/// deliverIfNoCollision checks for each recipient in tx.Recipients whether that recipient
+// / deliverIfNoCollision checks for each recipient in tx.Recipients whether that recipient
 // sees any overlapping transmission. If so, delivery is skipped for that node; otherwise, delivered.
 func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode) {
 	// For each recipient from our pre-filtered list:
@@ -211,7 +206,6 @@ func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode
 	})
 }
 
-
 // UnicastMessage simulates a direct unicast from sender to msg.To().
 func (net *networkImpl) UnicastMessage(msg message.IMessage, sender mesh.INode) {
 	net.mu.RLock()
@@ -237,8 +231,6 @@ func (net *networkImpl) addNode(n mesh.INode) {
 	net.mu.Lock()
 	net.nodes[n.GetID()] = n
 	net.mu.Unlock()
-
-
 
 	log.Printf("[sim] Node %s: joining network.\n", n.GetID())
 	go n.Run(net)
@@ -295,4 +287,3 @@ func (net *networkImpl) IsChannelFree(node mesh.INode) bool {
 	}
 	return true
 }
-

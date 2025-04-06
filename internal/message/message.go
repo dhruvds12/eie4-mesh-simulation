@@ -6,19 +6,17 @@ import "github.com/google/uuid"
 // MessageType is a string representing different message categories.
 type MessageType string
 
-
-
 const (
 	MsgHello    MessageType = "HELLO"
 	MsgHelloAck MessageType = "HELLO_ACK"
 	MsgData     MessageType = "DATA"
-	DataAck	    MessageType = "DATA_ACK"
+	DataAck     MessageType = "DATA_ACK"
 
 	BroadcastID = "00000000-0000-0000-0000-000000000000"
 
 	// Routing messages
 	MsgRREQ MessageType = "RREQ"
-    MsgRREP MessageType = "RREP"
+	MsgRREP MessageType = "RREP"
 	MsgRERR MessageType = "RERR"
 )
 
@@ -26,9 +24,9 @@ const (
 type Message struct {
 	Type    MessageType
 	From    uuid.UUID
-	Origin    uuid.UUID
+	Origin  uuid.UUID
 	To      uuid.UUID
-	Dest	uuid.UUID
+	Dest    uuid.UUID
 	ID      string
 	Payload string
 }
@@ -67,4 +65,3 @@ func (m *Message) GetDest() uuid.UUID {
 func (m *Message) GetOrigin() uuid.UUID {
 	return m.Origin
 }
-
