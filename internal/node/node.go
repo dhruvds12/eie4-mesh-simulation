@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
 	"mesh-simulation/internal/routing"
@@ -24,10 +25,12 @@ type nodeImpl struct {
 	muNeighbors    sync.RWMutex
 	neighbors      map[uuid.UUID]bool
 	seenBroadcasts map[string]bool
+
+	eventBus *eventBus.EventBus
 }
 
 // NewNode creates a new Node with a given ID.
-func NewNode(lat, long float64) mesh.INode {
+func NewNode(lat, long float64, bus *eventBus.EventBus) mesh.INode {
 	nodeID := uuid.New()
 	log.Printf("[sim] Created new node ID: %s, x: %f, y: %f", nodeID, lat, long)
 	return &nodeImpl{
@@ -37,7 +40,8 @@ func NewNode(lat, long float64) mesh.INode {
 		quit:           make(chan struct{}),
 		seenBroadcasts: make(map[string]bool),
 		neighbors:      make(map[uuid.UUID]bool),
-		router:         routing.NewAODVRouter(nodeID),
+		router:         routing.NewAODVRouter(nodeID, bus),
+		eventBus:       bus,
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
 
@@ -48,16 +49,19 @@ type networkImpl struct {
 	transmissions map[string]*Transmission
 
 	quitPruner chan struct{}
+
+	eventBus *eventBus.EventBus
 }
 
 // NewNetwork creates a new instance of the network.
-func NewNetwork() mesh.INetwork {
+func NewNetwork(bus *eventBus.EventBus) mesh.INetwork {
 	net := &networkImpl{
 		nodes:         make(map[uuid.UUID]mesh.INode),
 		joinRequests:  make(chan mesh.INode),
 		leaveRequests: make(chan uuid.UUID),
 		transmissions: make(map[string]*Transmission),
 		quitPruner:    make(chan struct{}),
+		eventBus:      bus,
 	}
 	// Start the pruner goroutine.
 	go net.runPruner()

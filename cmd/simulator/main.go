@@ -3,11 +3,15 @@ package main
 import (
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
+	eb "mesh-simulation/internal/eventBus"
 	network "mesh-simulation/internal/network"
-	node "mesh-simulation/internal/node"
+
+	"mesh-simulation/internal/commands"
+	ws "mesh-simulation/internal/server"
 )
 
 // ----------------------------------------------------------------------------
@@ -39,253 +43,267 @@ func main() {
 	// Log start of simulation
 	log.Println("Starting simulation...")
 
-	simulationV6()
+	// Create the event bus.
+	eb := eb.NewEventBus()
 
-}
-
-func simulationV1() {
-	//Create the network and start it
-	net := network.NewNetwork()
+	net := network.NewNetwork(eb)
 	go net.Run()
 
-	//Create some initial nodes
-	// TODO: Needs to change to actual coordinates - this is just for testing
-	// TODO: Hopefully setting them as actual coordinates will make it easy to overlay on a map
-	nodeA := node.NewNode(0, 0)
-	nodeB := node.NewNode(2800, 0)
-	nodeC := node.NewNode(1400, 0)
+	// Setup WebSocket routes.
+	ws.SetupRoutes(eb)
 
-	//Join the nodes to the network
-	net.Join(nodeA)
-	net.Join(nodeB)
-	net.Join(nodeC)
+	// Setup command endpoints.
+	http.HandleFunc("/node/create", commands.CreateNodeHandler(net, eb))
+	http.HandleFunc("/node/remove", commands.RemoveNodeHandler(net, eb))
 
-	time.Sleep(1 * time.Second)
-
-	// Peer to peer communication between nodes
-	nodeA.SendData(net, nodeB.GetID(), "SensorReading=123")
-	nodeB.SendData(net, nodeC.GetID(), "SensorReading=456")
-
-	time.Sleep(2 * time.Second)
-	// Create a new node and join it to the network
-	nodeD := node.NewNode(700, 0)
-	net.Join(nodeD)
-
-	time.Sleep(2 * time.Second)
-
-	nodeD.SendData(net, nodeA.GetID(), "Hello A, I'm new here!")
-
-	time.Sleep(2 * time.Second)
-	log.Printf("%s is leaving...", nodeB.GetID())
-	log.Println()
-	net.Leave(nodeB.GetID())
-
-	time.Sleep(2 * time.Second)
-	// try send data to a node that is not in the network
-	nodeD.SendData(net, nodeB.GetID(), "Hello B, I'm new here!")
-
-	time.Sleep(3 * time.Second)
-
-	log.Println("Shutting down simulation.")
-
-	net.Leave(nodeA.GetID())
-	net.Leave(nodeC.GetID())
-	net.Leave(nodeD.GetID())
-
-	time.Sleep(1 * time.Second)
+	// Start the HTTP server (e.g. on port 8080).
+	log.Println("Server started on :8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func simulationV2() {
-	netw := network.NewNetwork()
-	go netw.Run()
+// func simulationV1() {
+// 	//Create the network and start it
+// 	net := network.NewNetwork()
+// 	go net.Run()
 
-	nodeA := node.NewNode(0, 0)
-	nodeB := node.NewNode(0, 1000)
-	nodeC := node.NewNode(0, 2000)
-	nodeD := node.NewNode(0, 3000)
+// 	//Create some initial nodes
+// 	// TODO: Needs to change to actual coordinates - this is just for testing
+// 	// TODO: Hopefully setting them as actual coordinates will make it easy to overlay on a map
+// 	nodeA := node.NewNode(0, 0)
+// 	nodeB := node.NewNode(2800, 0)
+// 	nodeC := node.NewNode(1400, 0)
 
-	netw.Join(nodeA)
-	netw.Join(nodeB)
-	netw.Join(nodeC)
-	netw.Join(nodeD)
+// 	//Join the nodes to the network
+// 	net.Join(nodeA)
+// 	net.Join(nodeB)
+// 	net.Join(nodeC)
 
-	// Sleep so they can broadcast HELLO and find each other
-	time.Sleep(2 * time.Second)
+// 	time.Sleep(1 * time.Second)
 
-	log.Println()
-	log.Println()
-	log.Println()
-	log.Println()
+// 	// Peer to peer communication between nodes
+// 	nodeA.SendData(net, nodeB.GetID(), "SensorReading=123")
+// 	nodeB.SendData(net, nodeC.GetID(), "SensorReading=456")
 
-	// nodeB.SendData(netw, nodeD.GetID(), "Hello from B to D")
-	// time.Sleep(10 * time.Second)
+// 	time.Sleep(2 * time.Second)
+// 	// Create a new node and join it to the network
+// 	nodeD := node.NewNode(700, 0)
+// 	net.Join(nodeD)
 
-	log.Println()
-	log.Println()
-	log.Println()
-	log.Println()
-	// Now let's test multi-hop. A wants to send data to C
-	log.Println("NodeA -> NodeD: sending data! -> setting up route")
-	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to D")
+// 	time.Sleep(2 * time.Second)
 
-	time.Sleep(10 * time.Second)
-	log.Println()
-	log.Println()
+// 	nodeD.SendData(net, nodeA.GetID(), "Hello A, I'm new here!")
 
-	netw.Leave(nodeD.GetID())
-	time.Sleep(5 * time.Second)
-	log.Println()
-	log.Println()
+// 	time.Sleep(2 * time.Second)
+// 	log.Printf("%s is leaving...", nodeB.GetID())
+// 	log.Println()
+// 	net.Leave(nodeB.GetID())
 
-	// Have to send message twice as first time is used to discover route -> to be fixed
-	// log.Println("NodeA -> NodeD: sending data!")
-	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to D")
+// 	time.Sleep(2 * time.Second)
+// 	// try send data to a node that is not in the network
+// 	nodeD.SendData(net, nodeB.GetID(), "Hello B, I'm new here!")
 
-	// Let the route discovery / data forwarding happen
-	time.Sleep(20 * time.Second)
+// 	time.Sleep(3 * time.Second)
 
-	log.Println("Shutting down.")
-	netw.Leave(nodeA.GetID())
-	netw.Leave(nodeB.GetID())
-	netw.Leave(nodeC.GetID())
-	// netw.Leave(nodeD.GetID())
-	time.Sleep(1 * time.Second)
+// 	log.Println("Shutting down simulation.")
 
-	// TODO: This test case pases because the final node is not expected to ack the message -> to be fixed
-}
+// 	net.Leave(nodeA.GetID())
+// 	net.Leave(nodeC.GetID())
+// 	net.Leave(nodeD.GetID())
 
-func simulationV3() {
-	netw := network.NewNetwork()
-	go netw.Run()
+// 	time.Sleep(1 * time.Second)
+// }
 
-	nodeA := node.NewNode(0, 0)
-	nodeC := node.NewNode(0, 2000)
-	nodeD := node.NewNode(0, 3000)
-	nodeB := node.NewNode(0, 1000)
+// func simulationV2() {
+// 	netw := network.NewNetwork()
+// 	go netw.Run()
 
-	netw.Join(nodeA)
-	netw.Join(nodeB)
-	netw.Join(nodeC)
-	netw.Join(nodeD)
+// 	nodeA := node.NewNode(0, 0)
+// 	nodeB := node.NewNode(0, 1000)
+// 	nodeC := node.NewNode(0, 2000)
+// 	nodeD := node.NewNode(0, 3000)
 
-	// Sleep so they can broadcast HELLO and find each other
-	time.Sleep(5 * time.Second)
+// 	netw.Join(nodeA)
+// 	netw.Join(nodeB)
+// 	netw.Join(nodeC)
+// 	netw.Join(nodeD)
 
-	log.Println()
-	log.Println("Node A ID is: ", nodeA.GetID())
-	log.Println()
+// 	// Sleep so they can broadcast HELLO and find each other
+// 	time.Sleep(2 * time.Second)
 
-	nodeD.SendData(netw, nodeA.GetID(), "Hello from D to A")
+// 	log.Println()
+// 	log.Println()
+// 	log.Println()
+// 	log.Println()
 
-	time.Sleep(10 * time.Second)
+// 	// nodeB.SendData(netw, nodeD.GetID(), "Hello from B to D")
+// 	// time.Sleep(10 * time.Second)
 
-	netw.Leave(nodeA.GetID())
-	netw.Leave(nodeB.GetID())
-	netw.Leave(nodeC.GetID())
-	netw.Leave(nodeD.GetID())
-	time.Sleep(1 * time.Second)
-}
+// 	log.Println()
+// 	log.Println()
+// 	log.Println()
+// 	log.Println()
+// 	// Now let's test multi-hop. A wants to send data to C
+// 	log.Println("NodeA -> NodeD: sending data! -> setting up route")
+// 	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to D")
 
-func simulationV4() {
-	netw := network.NewNetwork()
-	go netw.Run()
+// 	time.Sleep(10 * time.Second)
+// 	log.Println()
+// 	log.Println()
 
-	nodeA := node.NewNode(0, 0)
-	nodeB := node.NewNode(0, 1000)
-	nodeC := node.NewNode(0, 2000)
-	nodeD := node.NewNode(0, 3000)
-	nodeE := node.NewNode(0, -1000)
+// 	netw.Leave(nodeD.GetID())
+// 	time.Sleep(5 * time.Second)
+// 	log.Println()
+// 	log.Println()
 
-	netw.Join(nodeA)
-	netw.Join(nodeB)
-	netw.Join(nodeC)
-	netw.Join(nodeD)
-	netw.Join(nodeE)
+// 	// Have to send message twice as first time is used to discover route -> to be fixed
+// 	// log.Println("NodeA -> NodeD: sending data!")
+// 	nodeA.SendData(netw, nodeD.GetID(), "Hello from A to D")
 
-	// Sleep so they can broadcast HELLO and find each other
-	time.Sleep(5 * time.Second)
+// 	// Let the route discovery / data forwarding happen
+// 	time.Sleep(20 * time.Second)
 
-	log.Println()
-	// log.Println("Node A ID is: ", nodeA.GetID())
+// 	log.Println("Shutting down.")
+// 	netw.Leave(nodeA.GetID())
+// 	netw.Leave(nodeB.GetID())
+// 	netw.Leave(nodeC.GetID())
+// 	// netw.Leave(nodeD.GetID())
+// 	time.Sleep(1 * time.Second)
 
-	log.Println()
+// 	// TODO: This test case pases because the final node is not expected to ack the message -> to be fixed
+// }
 
-	nodeA.SendData(netw, nodeE.GetID(), "Hello from A to E")
-	nodeC.SendData(netw, nodeB.GetID(), "Hello from C to B")
+// func simulationV3() {
+// 	netw := network.NewNetwork()
+// 	go netw.Run()
 
-	time.Sleep(30 * time.Second)
+// 	nodeA := node.NewNode(0, 0)
+// 	nodeC := node.NewNode(0, 2000)
+// 	nodeD := node.NewNode(0, 3000)
+// 	nodeB := node.NewNode(0, 1000)
 
-	netw.Leave(nodeA.GetID())
-	netw.Leave(nodeB.GetID())
-	netw.Leave(nodeC.GetID())
-	netw.Leave(nodeD.GetID())
-	netw.Leave(nodeE.GetID())
-	time.Sleep(1 * time.Second)
-}
+// 	netw.Join(nodeA)
+// 	netw.Join(nodeB)
+// 	netw.Join(nodeC)
+// 	netw.Join(nodeD)
 
-func simulationV5() {
-	netw := network.NewNetwork()
-	go netw.Run()
+// 	// Sleep so they can broadcast HELLO and find each other
+// 	time.Sleep(5 * time.Second)
 
-	nodeA := node.NewNode(0, 0)
-	nodeB := node.NewNode(0, 1000)
-	nodeC := node.NewNode(0, 2000)
-	nodeD := node.NewNode(0, 3000)
-	nodeE := node.NewNode(0, -1000)
+// 	log.Println()
+// 	log.Println("Node A ID is: ", nodeA.GetID())
+// 	log.Println()
 
-	netw.Join(nodeA)
-	netw.Join(nodeB)
-	netw.Join(nodeC)
-	netw.Join(nodeD)
-	netw.Join(nodeE)
+// 	nodeD.SendData(netw, nodeA.GetID(), "Hello from D to A")
 
-	// Sleep so they can broadcast HELLO and find each other
-	// time.Sleep(5 * time.Second)
+// 	time.Sleep(10 * time.Second)
 
-	// log.Println()
-	// // log.Println("Node A ID is: ", nodeA.GetID())
+// 	netw.Leave(nodeA.GetID())
+// 	netw.Leave(nodeB.GetID())
+// 	netw.Leave(nodeC.GetID())
+// 	netw.Leave(nodeD.GetID())
+// 	time.Sleep(1 * time.Second)
+// }
 
-	// log.Println()
+// func simulationV4() {
+// 	netw := network.NewNetwork()
+// 	go netw.Run()
 
-	// nodeA.SendData(netw, nodeE.GetID(), "Hello from A to E")
-	// nodeC.SendData(netw, nodeB.GetID(), "Hello from C to B")
+// 	nodeA := node.NewNode(0, 0)
+// 	nodeB := node.NewNode(0, 1000)
+// 	nodeC := node.NewNode(0, 2000)
+// 	nodeD := node.NewNode(0, 3000)
+// 	nodeE := node.NewNode(0, -1000)
 
-	time.Sleep(30 * time.Second)
+// 	netw.Join(nodeA)
+// 	netw.Join(nodeB)
+// 	netw.Join(nodeC)
+// 	netw.Join(nodeD)
+// 	netw.Join(nodeE)
 
-	netw.Leave(nodeA.GetID())
-	netw.Leave(nodeB.GetID())
-	netw.Leave(nodeC.GetID())
-	netw.Leave(nodeD.GetID())
-	netw.Leave(nodeE.GetID())
-	time.Sleep(1 * time.Second)
-}
+// 	// Sleep so they can broadcast HELLO and find each other
+// 	time.Sleep(5 * time.Second)
 
-func simulationV6() {
-	netw := network.NewNetwork()
-	go netw.Run()
+// 	log.Println()
+// 	// log.Println("Node A ID is: ", nodeA.GetID())
 
-	x := 0.0
-	y := 0.0
+// 	log.Println()
 
-	for i := 0; i < 5; i++ {
-		nodeA := node.NewNode(x, y)
-		netw.Join(nodeA)
-		// if i % 2 == 0 {
-		// 	if i == 2 || i == 6 {
-		// 		x -= 1000
-		// 	} else {
-		// 		x += 1000
-		// 	}
-		// } else {
-		// 	y += 1000
-		// }
-	}
+// 	nodeA.SendData(netw, nodeE.GetID(), "Hello from A to E")
+// 	nodeC.SendData(netw, nodeB.GetID(), "Hello from C to B")
 
-	time.Sleep(120 * time.Second)
-	log.Println()
-	log.Println()
-	log.Println()
-	netw.LeaveAll()
-	time.Sleep(10 * time.Second)
+// 	time.Sleep(30 * time.Second)
 
-}
+// 	netw.Leave(nodeA.GetID())
+// 	netw.Leave(nodeB.GetID())
+// 	netw.Leave(nodeC.GetID())
+// 	netw.Leave(nodeD.GetID())
+// 	netw.Leave(nodeE.GetID())
+// 	time.Sleep(1 * time.Second)
+// }
+
+// func simulationV5() {
+// 	netw := network.NewNetwork()
+// 	go netw.Run()
+
+// 	nodeA := node.NewNode(0, 0)
+// 	nodeB := node.NewNode(0, 1000)
+// 	nodeC := node.NewNode(0, 2000)
+// 	nodeD := node.NewNode(0, 3000)
+// 	nodeE := node.NewNode(0, -1000)
+
+// 	netw.Join(nodeA)
+// 	netw.Join(nodeB)
+// 	netw.Join(nodeC)
+// 	netw.Join(nodeD)
+// 	netw.Join(nodeE)
+
+// 	// Sleep so they can broadcast HELLO and find each other
+// 	// time.Sleep(5 * time.Second)
+
+// 	// log.Println()
+// 	// // log.Println("Node A ID is: ", nodeA.GetID())
+
+// 	// log.Println()
+
+// 	// nodeA.SendData(netw, nodeE.GetID(), "Hello from A to E")
+// 	// nodeC.SendData(netw, nodeB.GetID(), "Hello from C to B")
+
+// 	time.Sleep(30 * time.Second)
+
+// 	netw.Leave(nodeA.GetID())
+// 	netw.Leave(nodeB.GetID())
+// 	netw.Leave(nodeC.GetID())
+// 	netw.Leave(nodeD.GetID())
+// 	netw.Leave(nodeE.GetID())
+// 	time.Sleep(1 * time.Second)
+// }
+
+// func simulationV6() {
+// 	netw := network.NewNetwork()
+// 	go netw.Run()
+
+// 	x := 0.0
+// 	y := 0.0
+
+// 	for i := 0; i < 5; i++ {
+// 		nodeA := node.NewNode(x, y)
+// 		netw.Join(nodeA)
+// 		// if i % 2 == 0 {
+// 		// 	if i == 2 || i == 6 {
+// 		// 		x -= 1000
+// 		// 	} else {
+// 		// 		x += 1000
+// 		// 	}
+// 		// } else {
+// 		// 	y += 1000
+// 		// }
+// 	}
+
+// 	time.Sleep(120 * time.Second)
+// 	log.Println()
+// 	log.Println()
+// 	log.Println()
+// 	netw.LeaveAll()
+// 	time.Sleep(10 * time.Second)
+
+// }

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 
+	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
 
@@ -62,10 +63,11 @@ type AODVRouter struct {
 	dataQueue  map[uuid.UUID][]string    // queue of data to send after route is established
 	pendingTxs map[string]PendingTx
 	quitChan   chan struct{}
+	eventBus   *eventBus.EventBus
 }
 
 // NewAODVRouter constructs a router for a specific node
-func NewAODVRouter(ownerID uuid.UUID) *AODVRouter {
+func NewAODVRouter(ownerID uuid.UUID, bus *eventBus.EventBus) *AODVRouter {
 	return &AODVRouter{
 		ownerID:    ownerID,
 		routeTable: make(map[uuid.UUID]*RouteEntry), // TODO: implement a timeout for routes
@@ -73,6 +75,7 @@ func NewAODVRouter(ownerID uuid.UUID) *AODVRouter {
 		dataQueue:  make(map[uuid.UUID][]string),
 		pendingTxs: make(map[string]PendingTx),
 		quitChan:   make(chan struct{}),
+		eventBus:   bus,
 	}
 }
 
