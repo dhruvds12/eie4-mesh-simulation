@@ -16,6 +16,7 @@ const (
 	EventMessageSent         EventType = "MESSAGE_SENT"
 	EventMessageDelivered    EventType = "MESSAGE_DELIVERED"
 	EventRoutingTableUpdated EventType = "ROUTING_TABLE_UPDATED"
+	EventMovedNode           EventType = "MOVED_NODE"
 )
 
 // RouteEntry represents an entry in the routing table.
@@ -27,13 +28,13 @@ type RouteEntry struct {
 
 // Event holds details that the front end might need.
 type Event struct {
-	Type         EventType              `json:"type"`
-	NodeID       uuid.UUID              `json:"node_id"`
-	OtherNodeID  uuid.UUID              `json:"other_node_id"`
-	MessageID    uuid.UUID              `json:"message_id"`
-	RoutingTable map[uuid.UUID]*RouteEntry `json:"routing_table,omitempty"`
-	Payload      string                 `json:"payload,omitempty"`
-	Timestamp    time.Time              `json:"timestamp"`
+	Type              EventType  `json:"type"`
+	NodeID            uuid.UUID  `json:"node_id"`
+	OtherNodeID       uuid.UUID  `json:"other_node_id"`
+	MessageID         uuid.UUID  `json:"message_id"`
+	RoutingTableEntry RouteEntry `json:"routing_table,omitempty"`
+	Payload           string     `json:"payload,omitempty"`
+	Timestamp         time.Time  `json:"timestamp"`
 }
 
 // EventBus manages a set of subscribers and publishes events to them.

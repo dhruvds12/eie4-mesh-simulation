@@ -14,4 +14,5 @@ type INetwork interface {
 	UnicastMessage(msg message.IMessage, sender INode)
 	IsChannelFree(node INode) bool
 	LeaveAll()
+	GetNode(nodeId uuid.UUID) (INode, error)
 }

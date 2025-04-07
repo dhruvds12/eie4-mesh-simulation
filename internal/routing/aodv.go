@@ -237,12 +237,24 @@ func (r *AODVRouter) AddDirectNeighbor(nodeID, neighborID uuid.UUID) {
 	// If we don't have a route, or if this is a shorter route
 	existing, exists := r.routeTable[neighborID]
 	if !exists || (exists && existing.HopCount > 1) {
-		r.routeTable[neighborID] = &RouteEntry{
+		re := RouteEntry{
 			Destination: neighborID,
 			NextHop:     neighborID,
 			HopCount:    1,
 		}
+		r.routeTable[neighborID] = &re
 		log.Printf("[sim] [routing table] Node %s (router) -> direct neighbor: %s\n", r.ownerID, neighborID)
+
+		r.eventBus.Publish(eventBus.Event{
+			Type:   eventBus.EventRoutingTableUpdated,
+			NodeID: r.ownerID,
+			RoutingTableEntry: eventBus.RouteEntry{
+				Destination: re.Destination,
+				NextHop:     re.NextHop,
+				HopCount:    re.HopCount,
+			},
+			Timestamp: time.Now(),
+		})
 	}
 }
 
@@ -554,6 +566,13 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, msg m
 	if msg.GetDest() == r.ownerID {
 		log.Printf("[sim] Node %s: DATA arrived. Payload = %q\n", r.ownerID, msg.GetPayload())
 		// Send an ACK back to the sender
+		r.eventBus.Publish(eventBus.Event{
+			Type:        eventBus.EventMessageDelivered,
+			NodeID:      r.ownerID,
+			Payload:     msg.GetPayload(),
+			OtherNodeID: msg.GetFrom(),
+			Timestamp:   time.Now(),
+		})
 		// TODO: this is a simplification as this should depend on the packet header
 		r.sendDataAck(net, node, msg.GetFrom(), msg.GetID())
 		return
@@ -683,10 +702,23 @@ func (r *AODVRouter) maybeAddRoute(dest, nextHop uuid.UUID, hopCount int) {
 	if !ok || hopCount < exist.HopCount {
 		// log an update to the routing table
 		log.Printf("[sim] [routing table] Node %s (router) -> updated route to %s via %s (hop count %d)\n", r.ownerID, dest, nextHop, hopCount)
-		r.routeTable[dest] = &RouteEntry{
+
+		re := RouteEntry{
 			Destination: dest,
 			NextHop:     nextHop,
 			HopCount:    hopCount,
 		}
+		r.routeTable[dest] = &re
+
+		r.eventBus.Publish(eventBus.Event{
+			Type:   eventBus.EventRoutingTableUpdated,
+			NodeID: r.ownerID,
+			RoutingTableEntry: eventBus.RouteEntry{
+				Destination: re.Destination,
+				NextHop:     re.NextHop,
+				HopCount:    re.HopCount,
+			},
+			Timestamp: time.Now(),
+		})
 	}
 }

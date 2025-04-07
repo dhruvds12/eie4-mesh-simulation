@@ -1,6 +1,7 @@
 package network
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -290,4 +291,14 @@ func (net *networkImpl) IsChannelFree(node mesh.INode) bool {
 		}
 	}
 	return true
+}
+
+// get node from map
+func (net *networkImpl) GetNode(nodeId uuid.UUID) (mesh.INode, error) {
+	net.mu.RLock()
+	defer net.mu.RUnlock()
+	if nd, ok := net.nodes[nodeId]; ok {
+		return nd, nil
+	}
+	return nil, fmt.Errorf("node with id %s not found", nodeId)
 }
