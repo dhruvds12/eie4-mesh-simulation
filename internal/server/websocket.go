@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"mesh-simulation/internal/commands"
 	"mesh-simulation/internal/eventBus"
+	"mesh-simulation/internal/mesh"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -71,7 +73,7 @@ func commandHandler(eb *eventBus.EventBus, w http.ResponseWriter, r *http.Reques
 }
 
 // StartServer starts the HTTP server with endpoints for WebSocket and commands.
-func SetupRoutes(eb *eventBus.EventBus) {
+func StartServer(eb *eventBus.EventBus, net mesh.INetwork) {
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		wsHandler(eb, w, r)
 	})
@@ -79,6 +81,11 @@ func SetupRoutes(eb *eventBus.EventBus) {
 		commandHandler(eb, w, r)
 	})
 
-	// log.Println("Server started on :8080")
-	// log.Fatal(http.ListenAndServe(":8080", nil))
+	// Setup command endpoints.
+	http.HandleFunc("/node/create", commands.CreateNodeHandler(net, eb))
+	http.HandleFunc("/node/remove", commands.RemoveNodeHandler(net, eb))
+
+	// Start the HTTP server (e.g. on port 8080).
+	log.Println("Server started on :8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }

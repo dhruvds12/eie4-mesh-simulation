@@ -3,14 +3,12 @@ package main
 import (
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
 	eb "mesh-simulation/internal/eventBus"
 	network "mesh-simulation/internal/network"
 
-	"mesh-simulation/internal/commands"
 	ws "mesh-simulation/internal/server"
 )
 
@@ -50,15 +48,7 @@ func main() {
 	go net.Run()
 
 	// Setup WebSocket routes.
-	ws.SetupRoutes(eb)
-
-	// Setup command endpoints.
-	http.HandleFunc("/node/create", commands.CreateNodeHandler(net, eb))
-	http.HandleFunc("/node/remove", commands.RemoveNodeHandler(net, eb))
-
-	// Start the HTTP server (e.g. on port 8080).
-	log.Println("Server started on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	ws.StartServer(eb, net)
 }
 
 // func simulationV1() {
