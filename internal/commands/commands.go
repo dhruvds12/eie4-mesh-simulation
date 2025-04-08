@@ -39,6 +39,8 @@ func CreateNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 			NodeID:    newNode.GetID(),
 			Payload:   fmt.Sprintf("Node %s created and joined the network", newNode.GetID()),
 			Timestamp: time.Now(),
+			X:         newNode.GetPosition().Lat,
+			Y:         newNode.GetPosition().Long,
 		})
 
 		w.Write([]byte("Node created and joined the network"))
@@ -158,6 +160,8 @@ func MoveNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc
 			NodeID:    nodeID,
 			Payload:   fmt.Sprintf("Moved Node %s ", nodeID),
 			Timestamp: time.Now(),
+			X:         node.GetPosition().Lat,
+			Y:         node.GetPosition().Long,
 		})
 
 	}

@@ -35,6 +35,8 @@ type Event struct {
 	RoutingTableEntry RouteEntry `json:"routing_table,omitempty"`
 	Payload           string     `json:"payload,omitempty"`
 	Timestamp         time.Time  `json:"timestamp"`
+	X                 float64    `json:"x"`
+	Y                 float64    `json:"y"`
 }
 
 // EventBus manages a set of subscribers and publishes events to them.
