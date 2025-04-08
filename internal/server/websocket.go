@@ -82,10 +82,10 @@ func StartServer(eb *eventBus.EventBus, net mesh.INetwork) {
 	})
 
 	// Setup command endpoints.
-	http.HandleFunc("/node/create", commands.CreateNodeHandler(net, eb))
-	http.HandleFunc("/node/remove", commands.RemoveNodeHandler(net, eb))
-	http.HandleFunc("/node/sendMessage", commands.SendMessageHandler(net, eb))
-	http.HandleFunc("/node/move", commands.MoveNodeHandler(net, eb))
+	http.HandleFunc("/nodeAPI/create", commands.CreateNodeHandler(net, eb))
+	http.HandleFunc("/nodeAPI/remove", commands.RemoveNodeHandler(net, eb))
+	http.HandleFunc("/nodeAPI/sendMessage", commands.SendMessageHandler(net, eb))
+	http.HandleFunc("/nodeAPI/move", commands.MoveNodeHandler(net, eb))
 
 	// Start the HTTP server (e.g. on port 8080).
 	log.Println("Server started on :8080")
