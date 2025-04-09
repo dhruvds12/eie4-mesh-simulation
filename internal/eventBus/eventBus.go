@@ -11,12 +11,13 @@ import (
 type EventType string
 
 const (
-	EventNodeJoined          EventType = "NODE_JOINED"
-	EventNodeLeft            EventType = "NODE_LEFT"
-	EventMessageSent         EventType = "MESSAGE_SENT"
-	EventMessageDelivered    EventType = "MESSAGE_DELIVERED"
-	EventRoutingTableUpdated EventType = "ROUTING_TABLE_UPDATED"
-	EventMovedNode           EventType = "MOVED_NODE"
+	EventNodeJoined       EventType = "NODE_JOINED"
+	EventNodeLeft         EventType = "NODE_LEFT"
+	EventMessageSent      EventType = "MESSAGE_SENT"
+	EventMessageDelivered EventType = "MESSAGE_DELIVERED"
+	EventAddRouteEntry    EventType = "ADD_ROUTE_ENTRY"
+	EventMovedNode        EventType = "MOVED_NODE"
+	EventRemoveRouteEntry EventType = "REMOVED_ROUTE_ENTRY"
 )
 
 // RouteEntry represents an entry in the routing table.

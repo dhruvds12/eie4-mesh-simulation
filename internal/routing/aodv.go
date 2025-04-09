@@ -246,7 +246,7 @@ func (r *AODVRouter) AddDirectNeighbor(nodeID, neighborID uuid.UUID) {
 		log.Printf("[sim] [routing table] Node %s (router) -> direct neighbor: %s\n", r.ownerID, neighborID)
 
 		r.eventBus.Publish(eventBus.Event{
-			Type:   eventBus.EventRoutingTableUpdated,
+			Type:   eventBus.EventAddRouteEntry,
 			NodeID: r.ownerID,
 			RoutingTableEntry: eventBus.RouteEntry{
 				Destination: re.Destination,
@@ -660,20 +660,51 @@ func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID, dest uuid.UUID, send
 			if route.NextHop == sender {
 				log.Printf("Node %s: removing route to %s because it goes through broken node %s.\n", r.ownerID, dest, sender)
 				delete(r.routeTable, dest)
+
+				r.eventBus.Publish(eventBus.Event{
+					Type:   eventBus.EventRemoveRouteEntry,
+					NodeID: r.ownerID,
+					RoutingTableEntry: eventBus.RouteEntry{
+						Destination: route.Destination,
+						NextHop:     route.NextHop,
+						HopCount:    route.HopCount,
+					},
+					Timestamp: time.Now(),
+				})
 			}
 		}
 	}
 
 	// Remove any direct route to the broken node.
-	if _, ok := r.routeTable[brokenNode]; ok {
+	if route, ok := r.routeTable[brokenNode]; ok {
 		log.Printf("Node %s: removing direct route to broken node %s.\n", r.ownerID, brokenNode)
 		delete(r.routeTable, brokenNode)
+		r.eventBus.Publish(eventBus.Event{
+			Type:   eventBus.EventRemoveRouteEntry,
+			NodeID: r.ownerID,
+			RoutingTableEntry: eventBus.RouteEntry{
+				Destination: route.Destination,
+				NextHop:     route.NextHop,
+				HopCount:    route.HopCount,
+			},
+			Timestamp: time.Now(),
+		})
 	}
 	// Iterate through the routing table.
 	for dest, route := range r.routeTable {
 		if route.NextHop == brokenNode {
 			log.Printf("Node %s: invalidating route to %s because NextHop %s is broken.\n", r.ownerID, dest, brokenNode)
 			delete(r.routeTable, dest)
+			r.eventBus.Publish(eventBus.Event{
+				Type:   eventBus.EventRemoveRouteEntry,
+				NodeID: r.ownerID,
+				RoutingTableEntry: eventBus.RouteEntry{
+					Destination: route.Destination,
+					NextHop:     route.NextHop,
+					HopCount:    route.HopCount,
+				},
+				Timestamp: time.Now(),
+			})
 		}
 	}
 }
@@ -711,7 +742,7 @@ func (r *AODVRouter) maybeAddRoute(dest, nextHop uuid.UUID, hopCount int) {
 		r.routeTable[dest] = &re
 
 		r.eventBus.Publish(eventBus.Event{
-			Type:   eventBus.EventRoutingTableUpdated,
+			Type:   eventBus.EventAddRouteEntry,
 			NodeID: r.ownerID,
 			RoutingTableEntry: eventBus.RouteEntry{
 				Destination: re.Destination,
