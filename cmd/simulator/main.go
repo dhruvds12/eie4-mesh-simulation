@@ -7,8 +7,8 @@ import (
 	"time"
 
 	eb "mesh-simulation/internal/eventBus"
+	mqtt "mesh-simulation/internal/mqtt"
 	network "mesh-simulation/internal/network"
-
 	ws "mesh-simulation/internal/server"
 )
 
@@ -40,6 +40,15 @@ func main() {
 
 	// Log start of simulation
 	log.Println("Starting simulation...")
+
+	// Create and start the MQTT manager
+	mqttMgr := mqtt.New("tcp://132.145.67.221:1883", "go-simulation")
+	go mqttMgr.Run()
+
+	// Subscribe to a central registration topic where physical nodes announce themselves.
+	if err := mqttMgr.Subscribe("simulation/register", 0); err != nil {
+		log.Println("Error subscribing:", err)
+	}
 
 	// Create the event bus.
 	eb := eb.NewEventBus()
