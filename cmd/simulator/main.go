@@ -45,17 +45,17 @@ func main() {
 	mqttMgr := mqtt.New("tcp://132.145.67.221:1883", "go-simulation")
 	go mqttMgr.Run()
 
-	// Subscribe to a central registration topic where physical nodes announce themselves.
-	if err := mqttMgr.Subscribe("simulation/register", 0); err != nil {
-		log.Println("Error subscribing:", err)
-	}
-
+	
 	// Create the event bus.
 	eb := eb.NewEventBus()
-
+	
 	net := network.NewNetwork(eb)
 	go net.Run()
-
+	
+	// Subscribe to a central registration topic where physical nodes announce themselves.
+	if err := mqttMgr.Subscribe("simulation/register", 0, mqtt.ProcessMqttNodeMessage(net, eb)); err != nil {
+		log.Println("Error subscribing:", err)
+	}
 	// Setup WebSocket routes.
 	ws.StartServer(eb, net)
 }

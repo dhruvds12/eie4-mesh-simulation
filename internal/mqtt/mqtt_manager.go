@@ -2,6 +2,7 @@ package mqtt
 
 import (
 	"fmt"
+
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
@@ -30,8 +31,8 @@ func New(broker, clientID string) *MQTTManager {
 }
 
 // Subscribe subscribes to a specific topic with the desired QoS.
-func (m *MQTTManager) Subscribe(topic string, qos byte) error {
-	token := m.client.Subscribe(topic, qos, nil)
+func (m *MQTTManager) Subscribe(topic string, qos byte, callback mqtt.MessageHandler) error {
+	token := m.client.Subscribe(topic, qos, callback)
 	token.Wait()
 	return token.Error()
 }
