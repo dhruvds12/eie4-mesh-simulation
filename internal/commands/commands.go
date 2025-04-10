@@ -34,6 +34,7 @@ func CreateNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 		net.Join(newNode)
 
 		// Publish an event to inform subscribers that a new node has joined.
+		// TODO: Should move this can't really check that a node has been created.
 		bus.Publish(eventBus.Event{
 			Type:      eventBus.EventNodeJoined,
 			NodeID:    newNode.GetID(),
@@ -41,6 +42,7 @@ func CreateNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 			Timestamp: time.Now(),
 			X:         newNode.GetPosition().Lat,
 			Y:         newNode.GetPosition().Long,
+			Virtual:   true,
 		})
 
 		w.Write([]byte("Node created and joined the network"))
@@ -77,6 +79,7 @@ func RemoveNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 			NodeID:    nodeID,
 			Payload:   fmt.Sprintf("Node %s removed from the network", nodeID),
 			Timestamp: time.Now(),
+			Virtual:   true,
 		})
 
 		w.Write([]byte("Node removed from the network"))

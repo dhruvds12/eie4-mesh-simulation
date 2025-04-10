@@ -38,6 +38,7 @@ type Event struct {
 	Timestamp         time.Time  `json:"timestamp"`
 	X                 float64    `json:"x"`
 	Y                 float64    `json:"y"`
+	Virtual           bool       `json:"virtual"`
 }
 
 // EventBus manages a set of subscribers and publishes events to them.

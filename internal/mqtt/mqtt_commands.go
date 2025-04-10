@@ -25,7 +25,6 @@ func ProcessMqttNodeMessage(net mesh.INetwork, bus *eventBus.EventBus) func(mqtt
 		switch payload.Event {
 		case "register":
 			// Create a new physical node based on the registration payload.
-			// You might have a specialized constructor for physical nodes that takes the command and status topics.
 			newNode := node.NewPhysicalNode(payload.NodeID, payload.CommandTopic, payload.StatusTopic, payload.Lat, payload.Long, bus, client)
 			// Add the new node to the network.
 			net.Join(newNode)
@@ -38,6 +37,7 @@ func ProcessMqttNodeMessage(net mesh.INetwork, bus *eventBus.EventBus) func(mqtt
 				Timestamp: time.Now(),
 				X:         newNode.GetPosition().Lat,
 				Y:         newNode.GetPosition().Long,
+				Virtual:    false,
 			})
 			fmt.Printf("Node %s registered successfully\n", newNode.GetID())
 
@@ -57,6 +57,7 @@ func ProcessMqttNodeMessage(net mesh.INetwork, bus *eventBus.EventBus) func(mqtt
 				NodeID:    nodeID,
 				Payload:   fmt.Sprintf("Physical Node %s removed from the network", payload.NodeID),
 				Timestamp: time.Now(),
+				Virtual:    false,
 			})
 			fmt.Printf("Node %s removed successfully\n", payload.NodeID)
 
