@@ -3,6 +3,7 @@ package packet
 import (
 	"encoding/binary"
 	"fmt"
+	"math/rand"
 )
 
 // Packet Types
@@ -16,153 +17,205 @@ const (
 	PKT_DATA           uint8 = 0x06
 )
 
+const MaxPacketSize = 255
+
 type BaseHeader struct {
-	destNodeID uint32
-	srcNodeID  uint32
-	packetID   uint32
-	packetType uint8
-	flags      uint8
-	hopCount   uint8
-	reserved   uint8
+	DestNodeID uint32
+	SrcNodeID  uint32
+	PacketID   uint32
+	PacketType uint8
+	Flags      uint8
+	HopCount   uint8
+	Reserved   uint8
 }
 
 type RREQHeader struct {
-	originNodeID   uint32
+	OriginNodeID   uint32
 	RREQDestNodeID uint32
 }
 
 type RREPHeader struct {
-	originNodeID   uint32
+	OriginNodeID   uint32
 	RREPDestNodeID uint32
-	lifetime       uint16
-	numHops        uint8
+	Lifetime       uint16
+	NumHops        uint8
 }
 
 type RERRHeader struct {
-	reporterNodeID     uint32
-	brokenNodeID       uint32
-	originalDestNodeID uint32
-	originalPacketID   uint32
-	senderNodeID       uint32
+	ReporterNodeID     uint32
+	BrokenNodeID       uint32
+	OriginalDestNodeID uint32
+	OriginalPacketID   uint32
+	SenderNodeID       uint32
 }
 
 type ACKHeader struct {
-	originalPacketID uint32
+	OriginalPacketID uint32
 }
 
-type Data struct {
-	finalDestID uint32
+type DataHeader struct {
+	FinalDestID uint32
 }
 
-func (bh *BaseHeader) serialiseBaseHeader() ([]byte, error) {
+func (bh *BaseHeader) SerialiseBaseHeader() ([]byte, error) {
 	buf := make([]byte, 16)
-	binary.LittleEndian.PutUint32(buf[0:4],bh.destNodeID)
-	binary.LittleEndian.PutUint32(buf[4:8],bh.srcNodeID)
-	binary.LittleEndian.PutUint32(buf[8:12],bh.packetID)
-	buf[12] = bh.packetType
-	buf[13] = bh.flags
-	buf[14] = bh.hopCount
-	buf[15] = bh.reserved 
+	binary.LittleEndian.PutUint32(buf[0:4], bh.DestNodeID)
+	binary.LittleEndian.PutUint32(buf[4:8], bh.SrcNodeID)
+	binary.LittleEndian.PutUint32(buf[8:12], bh.PacketID)
+	buf[12] = bh.PacketType
+	buf[13] = bh.Flags
+	buf[14] = bh.HopCount
+	buf[15] = bh.Reserved
 	return buf, nil
 }
 
-func (bh *BaseHeader) deserialiseBaseHeader(buf []byte) error {
+func (bh *BaseHeader) DeserialiseBaseHeader(buf []byte) error {
 	if len(buf) < 16 {
 		return fmt.Errorf("buffer too short for BaseHeader")
 	}
-	bh.destNodeID = binary.LittleEndian.Uint32(buf[0:4])
-	bh.srcNodeID = binary.LittleEndian.Uint32(buf[4:8])
-	bh.packetID = binary.LittleEndian.Uint32(buf[8:12])
-	bh.packetType = buf[12]
-	bh.flags = buf[13]
-	bh.hopCount = buf[14]
-	bh.reserved = buf[15]
+	bh.DestNodeID = binary.LittleEndian.Uint32(buf[0:4])
+	bh.SrcNodeID = binary.LittleEndian.Uint32(buf[4:8])
+	bh.PacketID = binary.LittleEndian.Uint32(buf[8:12])
+	bh.PacketType = buf[12]
+	bh.Flags = buf[13]
+	bh.HopCount = buf[14]
+	bh.Reserved = buf[15]
 	return nil
 }
 
-func (rreq *RREQHeader) serialiseRREQHeader() ([]byte, error) {
+func (rreq *RREQHeader) SerialiseRREQHeader() ([]byte, error) {
 	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint32(buf[0:4], rreq.originNodeID)
-    binary.LittleEndian.PutUint32(buf[4:8], rreq.RREQDestNodeID)
+	binary.LittleEndian.PutUint32(buf[0:4], rreq.OriginNodeID)
+	binary.LittleEndian.PutUint32(buf[4:8], rreq.RREQDestNodeID)
 	return buf, nil
 
 }
 
-func (rreq *RREQHeader) deserialiseRREQHeader(buf []byte) error {
+func (rreq *RREQHeader) DeserialiseRREQHeader(buf []byte) error {
 	if len(buf) < 8 {
 		return fmt.Errorf("buffer too short for RREQHeader")
 	}
-	rreq.originNodeID = binary.LittleEndian.Uint32(buf[0:4])
+	rreq.OriginNodeID = binary.LittleEndian.Uint32(buf[0:4])
 	rreq.RREQDestNodeID = binary.LittleEndian.Uint32(buf[4:8])
 	return nil
 }
 
-func (rrep *RREPHeader) serialiseRREPHeader() ([]byte, error) {
+func (rrep *RREPHeader) SerialiseRREPHeader() ([]byte, error) {
 	buf := make([]byte, 11)
-	binary.LittleEndian.PutUint32(buf[0:4], rrep.originNodeID)
+	binary.LittleEndian.PutUint32(buf[0:4], rrep.OriginNodeID)
 	binary.LittleEndian.PutUint32(buf[4:8], rrep.RREPDestNodeID)
-	binary.LittleEndian.PutUint16(buf[8:10], rrep.lifetime)
-	buf[10] = rrep.numHops
+	binary.LittleEndian.PutUint16(buf[8:10], rrep.Lifetime)
+	buf[10] = rrep.NumHops
 	return buf, nil
 }
 
-func (rrep *RREPHeader) deserialiseRREPHeader(buf []byte) error {
+func (rrep *RREPHeader) DeserialiseRREPHeader(buf []byte) error {
 	if len(buf) < 11 {
 		return fmt.Errorf("buffer too short for RREPHeader")
 	}
-	rrep.originNodeID = binary.LittleEndian.Uint32(buf[0:4])
+	rrep.OriginNodeID = binary.LittleEndian.Uint32(buf[0:4])
 	rrep.RREPDestNodeID = binary.LittleEndian.Uint32(buf[4:8])
-	rrep.lifetime = binary.LittleEndian.Uint16(buf[8:10])
-	rrep.numHops = buf[10]
+	rrep.Lifetime = binary.LittleEndian.Uint16(buf[8:10])
+	rrep.NumHops = buf[10]
 	return nil
 }
 
-func (rerr *RERRHeader) serialiseRERRHeader() ([]byte, error) {
+func (rerr *RERRHeader) SerialiseRERRHeader() ([]byte, error) {
 	buf := make([]byte, 20)
-	binary.LittleEndian.PutUint32(buf[0:4], rerr.reporterNodeID)
-	binary.LittleEndian.PutUint32(buf[4:8], rerr.brokenNodeID)
-	binary.LittleEndian.PutUint32(buf[8:12], rerr.originalDestNodeID)
-	binary.LittleEndian.PutUint32(buf[12:16], rerr.originalPacketID)
-	binary.LittleEndian.PutUint32(buf[16:20], rerr.senderNodeID)
+	binary.LittleEndian.PutUint32(buf[0:4], rerr.ReporterNodeID)
+	binary.LittleEndian.PutUint32(buf[4:8], rerr.BrokenNodeID)
+	binary.LittleEndian.PutUint32(buf[8:12], rerr.OriginalDestNodeID)
+	binary.LittleEndian.PutUint32(buf[12:16], rerr.OriginalPacketID)
+	binary.LittleEndian.PutUint32(buf[16:20], rerr.SenderNodeID)
 	return buf, nil
 }
 
-func (rerr *RERRHeader) deserialiseRERRHeader(buf []byte) error {
+func (rerr *RERRHeader) DeserialiseRERRHeader(buf []byte) error {
 	if len(buf) < 20 {
 		return fmt.Errorf("buffer too short for RERRHeader")
 	}
-	rerr.reporterNodeID = binary.LittleEndian.Uint32(buf[0:4])
-	rerr.brokenNodeID = binary.LittleEndian.Uint32(buf[4:8])
-	rerr.originalDestNodeID = binary.LittleEndian.Uint32(buf[8:12])
-	rerr.originalPacketID = binary.LittleEndian.Uint32(buf[12:16])
-	rerr.senderNodeID = binary.LittleEndian.Uint32(buf[16:20])
+	rerr.ReporterNodeID = binary.LittleEndian.Uint32(buf[0:4])
+	rerr.BrokenNodeID = binary.LittleEndian.Uint32(buf[4:8])
+	rerr.OriginalDestNodeID = binary.LittleEndian.Uint32(buf[8:12])
+	rerr.OriginalPacketID = binary.LittleEndian.Uint32(buf[12:16])
+	rerr.SenderNodeID = binary.LittleEndian.Uint32(buf[16:20])
 	return nil
 }
 
-func (ack *ACKHeader) serialiseACKHeader() ([]byte, error) {
+func (ack *ACKHeader) SerialiseACKHeader() ([]byte, error) {
 	buf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(buf[0:4], ack.originalPacketID)
+	binary.LittleEndian.PutUint32(buf[0:4], ack.OriginalPacketID)
 	return buf, nil
 }
 
-func (ack *ACKHeader) deserialiseACKHeader(buf []byte) error {
+func (ack *ACKHeader) DeserialiseACKHeader(buf []byte) error {
 	if len(buf) < 4 {
 		return fmt.Errorf("buffer too short for ACKHeader")
 	}
-	ack.originalPacketID = binary.LittleEndian.Uint32(buf[0:4])
+	ack.OriginalPacketID = binary.LittleEndian.Uint32(buf[0:4])
 	return nil
 }
 
-func (d *Data) serialiseDataHeader() ([]byte, error) {
+func (d *DataHeader) SerialiseDataHeader() ([]byte, error) {
 	buf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(buf[0:4], d.finalDestID)
+	binary.LittleEndian.PutUint32(buf[0:4], d.FinalDestID)
 	return buf, nil
 }
 
-func (d *Data) deserialiseDataHeader(buf []byte) error {
+func (d *DataHeader) DeserialiseDataHeader(buf []byte) error {
 	if len(buf) < 4 {
 		return fmt.Errorf("buffer too short for Data header")
 	}
-	d.finalDestID = binary.LittleEndian.Uint32(buf[0:4])
+	d.FinalDestID = binary.LittleEndian.Uint32(buf[0:4])
 	return nil
+}
+
+func CreateDataPacket(srcID, destID, nextHop uint32, payload []byte) ([]byte, uint32, error) {
+
+	packetID := uint32(rand.Int31())
+
+	bh := BaseHeader{
+		DestNodeID: nextHop,
+		SrcNodeID:  srcID,
+		PacketID:   packetID,
+		PacketType: PKT_DATA,
+		Flags:      0x0,
+		HopCount:   0x0,
+		Reserved:   0x0,
+	}
+
+	dh := DataHeader{
+		FinalDestID: destID,
+	}
+
+	bhBytes, err := bh.SerialiseBaseHeader()
+	if err != nil {
+		return nil, 0, fmt.Errorf("error serialising BaseHeader")
+	}
+
+	dhBytes, err := dh.SerialiseDataHeader()
+	if err != nil {
+		return nil, 0, fmt.Errorf("error serialising DataHeader")
+	}
+
+	totalLength := len(bhBytes) + len(dhBytes) + len(payload)
+	if totalLength > MaxPacketSize {
+		allowedPayloadSize := MaxPacketSize - (len(bhBytes) + len(dhBytes))
+		fmt.Printf("Payload too large; truncating from %d to %d bytes\n", len(payload), allowedPayloadSize)
+		payload = payload[:allowedPayloadSize]
+		totalLength = MaxPacketSize
+	}
+
+	packetBuffer := make([]byte, totalLength)
+	offset := 0
+
+	copy(packetBuffer[offset:], bhBytes)
+	offset += len(bhBytes)
+
+	copy(packetBuffer[offset:], dhBytes)
+	offset += len(dhBytes)
+
+	copy(packetBuffer[offset:], payload)
+
+	return packetBuffer, packetID, nil
 }

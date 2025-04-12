@@ -3,27 +3,27 @@ package node
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
 	"mesh-simulation/internal/routing"
-
-	"github.com/google/uuid"
+	"mesh-simulation/internal/packet"
 )
 
 // nodeImpl is a concrete implementation of INode.
 type nodeImpl struct {
-	id          uuid.UUID
+	id          uint32
 	coordinates mesh.Coordinates
-	messages    chan message.IMessage
+	messages    chan []byte
 	quit        chan struct{}
 
 	router routing.IRouter
 
 	muNeighbors    sync.RWMutex
-	neighbors      map[uuid.UUID]bool
+	neighbors      map[uint32]bool
 	seenBroadcasts map[string]bool
 
 	eventBus *eventBus.EventBus
@@ -31,22 +31,23 @@ type nodeImpl struct {
 
 // NewNode creates a new Node with a given ID.
 func NewNode(lat, long float64, bus *eventBus.EventBus) mesh.INode {
-	nodeID := uuid.New()
+	nodeID := rand.Int31()
+	var nodeIdInt = uint32(nodeID)
 	log.Printf("[sim] Created new node ID: %s, x: %f, y: %f", nodeID, lat, long)
 	return &nodeImpl{
-		id:             nodeID,
+		id:             nodeIdInt,
 		coordinates:    mesh.CreateCoordinates(lat, long),
-		messages:       make(chan message.IMessage, 20),
+		messages:       make(chan []byte, 20),
 		quit:           make(chan struct{}),
 		seenBroadcasts: make(map[string]bool),
-		neighbors:      make(map[uuid.UUID]bool),
-		router:         routing.NewAODVRouter(nodeID, bus),
+		neighbors:      make(map[uint32]bool),
+		router:         routing.NewAODVRouter(nodeIdInt, bus),
 		eventBus:       bus,
 	}
 }
 
 // GetID returns the node's ID.
-func (n *nodeImpl) GetID() uuid.UUID {
+func (n *nodeImpl) GetID() uint32 {
 	return n.id
 }
 
@@ -73,7 +74,7 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 }
 
 // // SendData sends a unicast DATA message to a specific destination.
-// func (n *nodeImpl) SendData(net mesh.INetwork, destID uuid.UUID, payload string) {
+// func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
 // 	m := &message.Message{
 // 		Type:    message.MsgData,
 // 		From:    n.id,
@@ -85,7 +86,7 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 // }
 
 // SendData is a convenience method calling into the router
-func (n *nodeImpl) SendData(net mesh.INetwork, destID uuid.UUID, payload string) {
+func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
 	n.router.SendDataCSMA(net, n, destID, payload)
 }
 
@@ -113,21 +114,26 @@ func (n *nodeImpl) BroadcastHello(net mesh.INetwork) {
 }
 
 // HandleMessage processes an incoming message.
-func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
-	switch msg.GetType() {
+func (n *nodeImpl) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
+	var bh packet.BaseHeader
+	if err := bh.DeserialiseBaseHeader(receivedPacket); err != nil {
+		log.Printf("Node %s: failed to deserialize BaseHeader: %v", n.id, err)
+		return
+	}
+	switch bh.PacketType {
 	case message.MsgHello:
 		n.router.HandleMessage(net, n, msg)
 	case message.MsgHelloAck:
 		log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
 			n.id, msg.GetFrom(), msg.GetPayload())
 		n.muNeighbors.Lock()
-		n.neighbors[msg.GetFrom()] = true
-		n.router.AddDirectNeighbor(n.id, msg.GetFrom())
+		n.neighbors[bh.SrcNodeID] = true
+		n.router.AddDirectNeighbor(n.id, bh.SrcNodeID)
 		n.muNeighbors.Unlock()
-	case message.MsgData, message.MsgRREP, message.MsgRREQ, message.MsgRERR, message.DataAck:
+	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, message.DataAck:
 		n.router.HandleMessage(net, n, msg)
 	default:
-		log.Printf("Node %s: unknown message type from %s\n", n.id, msg.GetFrom())
+		log.Printf("Node %s: unknown message type from %d\n", n.id, bh.SrcNodeID)
 	}
 }
 
@@ -162,7 +168,7 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 // 	net.UnicastMessage(ack, n)
 // }
 
-func (n *nodeImpl) GetMessageChan() chan message.IMessage {
+func (n *nodeImpl) GetMessageChan() chan []byte {
 	return n.messages
 }
 

@@ -11,53 +11,46 @@ import (
 	"mesh-simulation/internal/routing"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/google/uuid"
 )
 
 // physicalNode is a concrete implementation of INode for physical nodes.
 type physicalNode struct {
-	id             uuid.UUID
+	id             uint32
 	coordinates    mesh.Coordinates
-	messages       chan message.IMessage
+	messages       chan []byte
 	quit           chan struct{}
 	commandTopic   string
 	statusTopic    string
 	router         routing.IRouter
 	mqttManager    mqtt.Client
 	muNeighbors    sync.RWMutex
-	neighbors      map[uuid.UUID]bool
+	neighbors      map[uint32]bool
 	seenBroadcasts map[string]bool
 	eventBus       *eventBus.EventBus
 }
 
 // NewPhysicalNode creates a new physical node using parameters received via MQTT registration.
-func NewPhysicalNode(nodeID, commandTopic, statusTopic string, lat, long float64, bus *eventBus.EventBus, mqttClient mqtt.Client) mesh.INode {
+func NewPhysicalNode(nodeID uint32, commandTopic, statusTopic string, lat, long float64, bus *eventBus.EventBus, mqttClient mqtt.Client) mesh.INode {
 	// Try to parse the incoming nodeID; if invalid, generate a new one
 	// TODO: hardware id's and simulation ids are incompatible currently need to update the simulation
-	parsedID, err := uuid.Parse(nodeID)
-	if err != nil {
-		log.Printf("Invalid nodeID %s, generating a new one: %v", nodeID, err)
-		parsedID = uuid.New()
-	}
-
-	log.Printf("[sim] Created new physical node ID: %s, x: %f, y: %f", parsedID, lat, long)
+	log.Printf("[sim] Created new physical node ID: %d, x: %f, y: %f", nodeID, lat, long) //TODO: is this correct
 	return &physicalNode{
-		id:             parsedID,
+		id:             nodeID,
 		coordinates:    mesh.CreateCoordinates(lat, long),
-		messages:       make(chan message.IMessage, 20),
+		messages:       make(chan []byte, 20),
 		quit:           make(chan struct{}),
 		commandTopic:   commandTopic,
 		statusTopic:    statusTopic,
-		neighbors:      make(map[uuid.UUID]bool),
+		neighbors:      make(map[uint32]bool),
 		seenBroadcasts: make(map[string]bool),
 		eventBus:       bus,
-		router:         routing.NewAODVRouter(parsedID, bus),
+		router:         routing.NewAODVRouter(nodeID, bus),
 		mqttManager:    mqttClient,
 	}
 }
 
 // GetID returns the node's ID.
-func (p *physicalNode) GetID() uuid.UUID {
+func (p *physicalNode) GetID() uint32 {
 	return p.id
 }
 
@@ -86,7 +79,7 @@ func (p *physicalNode) Run(net mesh.INetwork) {
 }
 
 // SendData sends data to a specified destination using the node’s router.
-func (p *physicalNode) SendData(net mesh.INetwork, destID uuid.UUID, payload string) {
+func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string) {
 	p.router.SendDataCSMA(net, p, destID, payload)
 
 	// also need to send a message to the physical node to send a messge
@@ -99,7 +92,7 @@ func (p *physicalNode) BroadcastHello(net mesh.INetwork) {
 }
 
 // HandleMessage processes an incoming message.
-func (p *physicalNode) HandleMessage(net mesh.INetwork, msg message.IMessage) {
+func (p *physicalNode) HandleMessage(net mesh.INetwork, msg []byte) {
 	// add physical-specific handling.
 	switch msg.GetType() {
 	case message.MsgHello:
@@ -119,7 +112,7 @@ func (p *physicalNode) HandleMessage(net mesh.INetwork, msg message.IMessage) {
 }
 
 // GetMessageChan returns the message channel.
-func (p *physicalNode) GetMessageChan() chan message.IMessage {
+func (p *physicalNode) GetMessageChan() chan []byte {
 	return p.messages
 }
 

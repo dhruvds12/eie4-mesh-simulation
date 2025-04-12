@@ -9,8 +9,6 @@ import (
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -22,7 +20,8 @@ const (
 
 // Struct to hold the transmission details
 type Transmission struct {
-	Msg        message.IMessage
+	PacketID   uint32
+	Packet     []byte
 	Sender     mesh.INode
 	StartTime  time.Time
 	EndTime    time.Time
@@ -42,12 +41,12 @@ func sendersCanCollide(senderA, senderB mesh.INode) bool {
 
 type networkImpl struct {
 	mu    sync.RWMutex
-	nodes map[uuid.UUID]mesh.INode
+	nodes map[uint32]mesh.INode
 
 	joinRequests  chan mesh.INode
-	leaveRequests chan uuid.UUID
+	leaveRequests chan uint32
 
-	transmissions map[string]*Transmission
+	transmissions map[uint32]*Transmission
 
 	quitPruner chan struct{}
 
@@ -57,10 +56,10 @@ type networkImpl struct {
 // NewNetwork creates a new instance of the network.
 func NewNetwork(bus *eventBus.EventBus) mesh.INetwork {
 	net := &networkImpl{
-		nodes:         make(map[uuid.UUID]mesh.INode),
+		nodes:         make(map[uint32]mesh.INode),
 		joinRequests:  make(chan mesh.INode),
-		leaveRequests: make(chan uuid.UUID),
-		transmissions: make(map[string]*Transmission),
+		leaveRequests: make(chan uint32),
+		transmissions: make(map[uint32]*Transmission),
 		quitPruner:    make(chan struct{}),
 		eventBus:      bus,
 	}
@@ -116,7 +115,7 @@ func (net *networkImpl) Join(n mesh.INode) {
 }
 
 // Leave removes a node from the network by ID.
-func (net *networkImpl) Leave(nodeID uuid.UUID) {
+func (net *networkImpl) Leave(nodeID uint32) {
 	net.leaveRequests <- nodeID
 }
 
@@ -133,7 +132,7 @@ func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 	for _, nd := range tx.Recipients {
 		// Check again that the node is still in range (e.g. if nodes move).
 		if !net.IsInRange(sender, nd) {
-			log.Printf("[Network] Node %s is no longer in range for msg %s.\n", nd.GetID(), tx.Msg.GetID())
+			log.Printf("[Network] Node %d is no longer in range for msg %d.\n", nd.GetID(), tx.PacketID)
 			continue
 		}
 
@@ -157,11 +156,11 @@ func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 
 		// If more than zero overlapping transmissions affect this node, drop delivery.
 		if overlappingCount > 0 {
-			log.Printf("[Collision] At node %s, skipping delivery of msg %s due to %d overlapping transmission(s).\n",
-				nd.GetID(), tx.Msg.GetID(), overlappingCount)
+			log.Printf("[Collision] At node %d, skipping delivery of msg %d due to %d overlapping transmission(s).\n",
+				nd.GetID(), tx.PacketID, overlappingCount)
 		} else {
-			nd.GetMessageChan() <- tx.Msg
-			log.Printf("[Network] Delivered msg %s to node %s.\n", tx.Msg.GetID(), nd.GetID())
+			nd.GetMessageChan() <- tx.Packet
+			log.Printf("[Network] Delivered msg %d to node %d.\n", tx.PacketID, nd.GetID())
 		}
 	}
 }
@@ -169,7 +168,7 @@ func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 // BroadcastMessage simulates a broadcast transmission. It pre-filters the recipient nodes
 // that are in range of the sender at the start of transmission and creates a Transmission record.
 // The transmission record is kept in the global map until it is pruned by the pruner goroutine.
-func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode) {
+func (net *networkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packetID uint32) {
 	net.mu.Lock()
 
 	start := time.Now()
@@ -183,13 +182,14 @@ func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode
 		}
 		if net.IsInRange(sender, nd) {
 			recipients = append(recipients, nd)
-			log.Printf("[Network] Node %q pre-filtered as recipient for msg %s.\n", id, msg.GetID())
+			log.Printf("[Network] Node %q pre-filtered as recipient for msg %d.\n", id, packetID)
 		}
 	}
 
 	// Create a transmission record.
 	tx := &Transmission{
-		Msg:        msg,
+		PacketID:   packetID,
+		Packet:     packet,
 		Sender:     sender,
 		StartTime:  start,
 		EndTime:    end,
@@ -197,7 +197,7 @@ func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode
 	}
 
 	// Store the transmission.
-	net.transmissions[msg.GetID()] = tx
+	net.transmissions[packetID] = tx
 
 	net.mu.Unlock()
 
@@ -212,11 +212,10 @@ func (net *networkImpl) BroadcastMessage(msg message.IMessage, sender mesh.INode
 }
 
 // UnicastMessage simulates a direct unicast from sender to msg.To().
-func (net *networkImpl) UnicastMessage(msg message.IMessage, sender mesh.INode) {
+func (net *networkImpl) UnicastMessage(msg []byte, sender mesh.INode, packetID uint32, to uint32) {
 	net.mu.RLock()
 	defer net.mu.RUnlock()
 
-	to := msg.GetTo()
 	if receiver, ok := net.nodes[to]; ok {
 		if net.IsInRange(sender, receiver) {
 			ndChan := net.getNodeChannel(receiver)
@@ -237,7 +236,7 @@ func (net *networkImpl) addNode(n mesh.INode) {
 	net.nodes[n.GetID()] = n
 	net.mu.Unlock()
 
-	log.Printf("[sim] Node %s: joining network.\n", n.GetID())
+	log.Printf("[sim] Node %d: joining network.\n", n.GetID())
 	go n.Run(net)
 
 	// Broadcast a HELLO so new node can discover neighbors.
@@ -245,7 +244,7 @@ func (net *networkImpl) addNode(n mesh.INode) {
 }
 
 // removeNode signals the node to stop and removes it from the map.
-func (net *networkImpl) removeNode(nodeID uuid.UUID) {
+func (net *networkImpl) removeNode(nodeID uint32) {
 	net.mu.Lock()
 	if nd, ok := net.nodes[nodeID]; ok {
 		// Close the node's quit channel if there's a direct handle
@@ -254,7 +253,7 @@ func (net *networkImpl) removeNode(nodeID uuid.UUID) {
 			close(ni.QuitChan())
 		}
 		// Print out the details of the leavign node
-		log.Printf("[sim] Node %s: leaving network.\n", nodeID)
+		log.Printf("[sim] Node %d: leaving network.\n", nodeID)
 		net.nodes[nodeID].PrintNodeDetails()
 		// Remove the node from the map
 		delete(net.nodes, nodeID)
@@ -294,11 +293,11 @@ func (net *networkImpl) IsChannelFree(node mesh.INode) bool {
 }
 
 // get node from map
-func (net *networkImpl) GetNode(nodeId uuid.UUID) (mesh.INode, error) {
+func (net *networkImpl) GetNode(nodeId uint32) (mesh.INode, error) {
 	net.mu.RLock()
 	defer net.mu.RUnlock()
 	if nd, ok := net.nodes[nodeId]; ok {
 		return nd, nil
 	}
-	return nil, fmt.Errorf("node with id %s not found", nodeId)
+	return nil, fmt.Errorf("node with id %d not found", nodeId)
 }

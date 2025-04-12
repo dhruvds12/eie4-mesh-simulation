@@ -4,8 +4,6 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type EventType string
@@ -22,17 +20,17 @@ const (
 
 // RouteEntry represents an entry in the routing table.
 type RouteEntry struct {
-	Destination uuid.UUID
-	NextHop     uuid.UUID
+	Destination uint32
+	NextHop     uint32
 	HopCount    int
 }
 
 // Event holds details that the front end might need.
 type Event struct {
 	Type              EventType  `json:"type"`
-	NodeID            uuid.UUID  `json:"node_id"`
-	OtherNodeID       uuid.UUID  `json:"other_node_id"`
-	MessageID         uuid.UUID  `json:"message_id"`
+	NodeID            uint32     `json:"node_id"`
+	OtherNodeID       uint32     `json:"other_node_id"`
+	MessageID         uint32     `json:"message_id"`
 	RoutingTableEntry RouteEntry `json:"routing_table,omitempty"`
 	Payload           string     `json:"payload,omitempty"`
 	Timestamp         time.Time  `json:"timestamp"`

@@ -10,7 +10,9 @@ import (
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/message"
+	"mesh-simulation/internal/packet"
 
+	"github.com/eclipse/paho.mqtt.golang/packets"
 	"github.com/google/uuid"
 )
 
@@ -23,31 +25,31 @@ TODO:
 
 // AODVControl is extra data for RREQ/RREP
 type AODVControl struct {
-	Source      uuid.UUID
-	Destination uuid.UUID
+	Source      uint32
+	Destination uint32
 	HopCount    int
 }
 
 // RouteEntry stores route info
 type RouteEntry struct {
-	Destination uuid.UUID
-	NextHop     uuid.UUID
+	Destination uint32
+	NextHop     uint32
 	HopCount    int
 }
 
 type RERRControl struct {
-	BrokenNode    uuid.UUID
-	MessageDest   uuid.UUID
+	BrokenNode    uint32
+	MessageDest   uint32
 	MessageId     string
-	MessageSource uuid.UUID
+	MessageSource uint32
 }
 
 // Used to store transactions that are pending ACKs
 type PendingTx struct {
-	MsgID               string
-	Dest                uuid.UUID // destination of the data
-	PotentialBrokenNode uuid.UUID // (the broken node)
-	Origin              uuid.UUID // original source of the data
+	MsgID               uint32
+	Dest                uint32 // destination of the data
+	PotentialBrokenNode uint32 // (the broken node)
+	Origin              uint32 // original source of the data
 	ExpiryTime          time.Time
 }
 
@@ -57,23 +59,23 @@ type DataAckPayload struct {
 
 // AODVRouter is a per-node router
 type AODVRouter struct {
-	ownerID    uuid.UUID
-	routeTable map[uuid.UUID]*RouteEntry // key = destination ID
-	seenMsgIDs map[string]bool           // deduplicate RREQ/RREP
-	dataQueue  map[uuid.UUID][]string    // queue of data to send after route is established
-	pendingTxs map[string]PendingTx
+	ownerID    uint32
+	routeTable map[uint32]*RouteEntry // key = destination ID
+	seenMsgIDs map[uint32]bool           // deduplicate RREQ/RREP
+	dataQueue  map[uint32][]string    // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
+	pendingTxs map[uint32]PendingTx
 	quitChan   chan struct{}
 	eventBus   *eventBus.EventBus
 }
 
 // NewAODVRouter constructs a router for a specific node
-func NewAODVRouter(ownerID uuid.UUID, bus *eventBus.EventBus) *AODVRouter {
+func NewAODVRouter(ownerID uint32, bus *eventBus.EventBus) *AODVRouter {
 	return &AODVRouter{
 		ownerID:    ownerID,
-		routeTable: make(map[uuid.UUID]*RouteEntry), // TODO: implement a timeout for routes
-		seenMsgIDs: make(map[string]bool),
-		dataQueue:  make(map[uuid.UUID][]string),
-		pendingTxs: make(map[string]PendingTx),
+		routeTable: make(map[uint32]*RouteEntry), // TODO: implement a timeout for routes
+		seenMsgIDs: make(map[uint32]bool),
+		dataQueue:  make(map[uint32][]string),
+		pendingTxs: make(map[uint32]PendingTx),
 		quitChan:   make(chan struct{}),
 		eventBus:   bus,
 	}
@@ -133,7 +135,7 @@ func (r *AODVRouter) StopPendingTxChecker() {
 
 // -- IRouter methods --
 
-func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.UUID, payload string) {
+func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint32, payload string) {
 	// Check if we already have a route
 	entry, hasRoute := r.routeTable[destID]
 	if !hasRoute {
@@ -143,26 +145,33 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 		r.initiateRREQ(net, sender, destID)
 		return
 	}
+	
 
-	// We have a route -> unicast data to NextHop
-	msgID := fmt.Sprintf("data-%s-%s-%d", r.ownerID, destID, time.Now().UnixNano())
 	nextHop := entry.NextHop
-	dataMsg := &message.Message{
-		Type:    message.MsgData,
-		From:    r.ownerID,
-		Origin:  r.ownerID,
-		To:      nextHop, //Todo: this could be nextHop
-		Dest:    destID,
-		ID:      msgID,
-		Payload: payload,
+	payloadBytes := []byte(payload)
+	completePacket, packetID,err := packet.CreateDataPacket(r.ownerID, destID, nextHop, payloadBytes)
+	if err != nil {
+		log.Printf("[sim] Node %s: failed to create data packet: %v\n", r.ownerID, err)
+		return
 	}
+	
+	// msgID2 := fmt.Sprintf("data-%s-%s-%d", r.ownerID, destID, time.Now().UnixNano())
+	// dataMsg := &message.Message{
+	// 	Type:    message.MsgData,
+	// 	From:    r.ownerID,
+	// 	Origin:  r.ownerID,
+	// 	To:      nextHop, //Todo: this could be nextHop
+	// 	Dest:    destID,
+	// 	ID:      msgID2,
+	// 	Payload: payload,
+	// }
 
 	log.Printf("[sim] Node %s (router) -> forwarding data to %s via %s\n", r.ownerID, destID, nextHop)
-	net.BroadcastMessage(dataMsg, sender)
+	net.BroadcastMessage(completePacket, sender, packetID)
 
 	expire := time.Now().Add(10 * time.Second) // e.g. 3s
-	r.pendingTxs[msgID] = PendingTx{
-		MsgID:               msgID,
+	r.pendingTxs[packetID] = PendingTx{
+		MsgID:               packetID,
 		Dest:                destID,
 		PotentialBrokenNode: nextHop,
 		Origin:              r.ownerID,
@@ -170,7 +179,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uuid.
 	}
 }
 
-func (r *AODVRouter) SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID uuid.UUID, payload string) {
+func (r *AODVRouter) SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID uint32, payload string) {
 	backoff := 100 * time.Millisecond
 	// Check if the channel is busy
 	for !net.IsChannelFree(sender) {
@@ -189,7 +198,12 @@ func (r *AODVRouter) SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID u
 
 // HandleMessage is called when the node receives any message
 // TODO: repeated logic should be removed?????
-func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, msg message.IMessage) {
+func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedPacket []byte) {
+	var bh packet.BaseHeader
+	if err := bh.DeserialiseBaseHeader(receivedPacket); err != nil {
+		log.Printf("Node %s: failed to deserialize BaseHeader: %v", r.ownerID, err)
+		return
+	}
 	switch msg.GetType() {
 	case message.MsgHello:
 		r.handleHello(net, msg, node)
@@ -229,7 +243,7 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, msg messa
 }
 
 // AddDirectNeighbor is called by the node when it discovers a new neighbor
-func (r *AODVRouter) AddDirectNeighbor(nodeID, neighborID uuid.UUID) {
+func (r *AODVRouter) AddDirectNeighbor(nodeID, neighborID uint32) {
 	// only do this if nodeID == r.ownerID
 	if nodeID != r.ownerID {
 		return
@@ -337,7 +351,7 @@ func (r *AODVRouter) broadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, 
 	net.BroadcastMessage(msg, sender)
 }
 
-func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID uuid.UUID) {
+func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID uint32) {
 	ctrl := AODVControl{
 		Source:      r.ownerID,
 		Destination: destID,
@@ -405,7 +419,7 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, msg message.
 	r.broadcastMessageCSMA(net, node, fwdMsg)
 }
 
-func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, source, destination uuid.UUID, hopCount int) {
+func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, source, destination uint32, hopCount int) {
 	// find route to 'source' in reverse direction
 	reverseRoute := r.routeTable[source]
 	if reverseRoute == nil {
@@ -478,7 +492,7 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, msg message.
 	r.broadcastMessageCSMA(net, node, fwdRrep)
 }
 
-func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uuid.UUID, dataDest uuid.UUID, brokenNode uuid.UUID, messageId string, messageSource uuid.UUID) {
+func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uint32, dataDest uint32, brokenNode uint32, messageId string, messageSource uint32) {
 	rerr := RERRControl{
 		BrokenNode:    brokenNode,
 		MessageDest:   dataDest,
@@ -653,7 +667,7 @@ func (r *AODVRouter) HandleDataAck(msg message.IMessage) {
 	}
 }
 
-func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID, dest uuid.UUID, sender uuid.UUID) {
+func (r *AODVRouter) InvalidateRoutes(brokenNode uint32, dest uint32, sender uint32) {
 	// remove route to destination node if it goes through the sender
 	if sender != uuid.Nil {
 		if route, ok := r.routeTable[dest]; ok {
@@ -710,7 +724,7 @@ func (r *AODVRouter) InvalidateRoutes(brokenNode uuid.UUID, dest uuid.UUID, send
 }
 
 // send ack for data packets
-func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uuid.UUID, prevMsgId string) {
+func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uint32, prevMsgId string) {
 	payload := DataAckPayload{
 		MsgID: prevMsgId,
 	}
@@ -728,7 +742,7 @@ func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uuid.UUI
 }
 
 // maybeAddRoute updates route if shorter
-func (r *AODVRouter) maybeAddRoute(dest, nextHop uuid.UUID, hopCount int) {
+func (r *AODVRouter) maybeAddRoute(dest, nextHop uint32, hopCount int) {
 	exist, ok := r.routeTable[dest]
 	if !ok || hopCount < exist.HopCount {
 		// log an update to the routing table

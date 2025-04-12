@@ -1,18 +1,12 @@
 package mesh
 
-import (
-	"mesh-simulation/internal/message"
-
-	"github.com/google/uuid"
-)
-
 type INode interface {
-	GetID() uuid.UUID
+	GetID() uint32
 	Run(net INetwork)
-	SendData(net INetwork, destID uuid.UUID, payload string)
+	SendData(net INetwork, destID uint32, payload string)
 	BroadcastHello(net INetwork)
-	HandleMessage(net INetwork, msg message.IMessage)
-	GetMessageChan() chan message.IMessage
+	HandleMessage(net INetwork, receivedPacket []byte)
+	GetMessageChan() chan []byte
 	GetQuitChan() chan struct{}
 	PrintNodeDetails()
 
