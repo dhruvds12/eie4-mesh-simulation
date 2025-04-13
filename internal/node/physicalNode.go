@@ -85,9 +85,9 @@ func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string
 	// also need to send a message to the physical node to send a messge
 }
 
-// BroadcastHello sends a HELLO broadcast from this physical node.
-func (p *physicalNode) BroadcastHello(net mesh.INetwork) {
-	p.router.BroadcastHello(net, p)
+// SendBroadcastInfo sends a HELLO broadcast from this physical node.
+func (p *physicalNode) SendBroadcastInfo(net mesh.INetwork) {
+	p.router.SendBroadcastInfo(net, p)
 	// need to send a message to a physical node
 }
 

@@ -8,7 +8,6 @@ import (
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
-	"mesh-simulation/internal/message"
 )
 
 const (
@@ -240,7 +239,7 @@ func (net *networkImpl) addNode(n mesh.INode) {
 	go n.Run(net)
 
 	// Broadcast a HELLO so new node can discover neighbors.
-	n.BroadcastHello(net)
+	n.SendBroadcastInfo(net)
 }
 
 // removeNode signals the node to stop and removes it from the map.
@@ -263,9 +262,9 @@ func (net *networkImpl) removeNode(nodeID uint32) {
 
 // getNodeChannel is a helper to get the 'messages' channel from the node.
 // Because node.INode is an interface, we do a type assertion.
-func (net *networkImpl) getNodeChannel(n mesh.INode) chan message.IMessage {
+func (net *networkImpl) getNodeChannel(n mesh.INode) chan []byte {
 	type channelGetter interface {
-		GetMessageChan() chan message.IMessage
+		GetMessageChan() chan []byte
 	}
 	if cg, ok := n.(channelGetter); ok {
 		return cg.GetMessageChan()

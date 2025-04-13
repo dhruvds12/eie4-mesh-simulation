@@ -91,7 +91,7 @@ func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
 }
 
 // BroadcastHello sends a HELLO broadcast announcing the node’s presence.
-func (n *nodeImpl) BroadcastHello(net mesh.INetwork) {
+func (n *nodeImpl) SendBroadcastInfo(net mesh.INetwork) {
 	// // Create a unique broadcast ID to deduplicate
 	// broadcastID := fmt.Sprintf("hello-%s-%d", n.id, time.Now().UnixNano())
 
@@ -110,7 +110,7 @@ func (n *nodeImpl) BroadcastHello(net mesh.INetwork) {
 	// 	Payload: fmt.Sprintf("Hello from %s", n.id),
 	// }
 	// net.BroadcastMessage(m, n)
-	n.router.BroadcastHello(net, n)
+	n.router.SendBroadcastInfo(net, n)
 }
 
 // HandleMessage processes an incoming message.
@@ -123,7 +123,7 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	switch bh.PacketType {
 	case message.MsgHello:
 		n.router.HandleMessage(net, n, msg)
-	case message.MsgHelloAck:
+	case message.MsgHelloAck: // TODO why is this separate to data ack -> should all fall under ack
 		log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
 			n.id, msg.GetFrom(), msg.GetPayload())
 		n.muNeighbors.Lock()
