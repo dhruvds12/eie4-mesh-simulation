@@ -94,6 +94,19 @@ func (p *physicalNode) SendBroadcastInfo(net mesh.INetwork) {
 // HandleMessage processes an incoming message.
 func (p *physicalNode) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	// add physical-specific handling.
+	fmt.Printf("Payload (hex): %x\n", receivedPacket)
+	fmt.Printf("Payload: %v\n", receivedPacket)
+	payloadString := string(receivedPacket)
+	fmt.Printf("Payload: %v\n", payloadString)
+
+	log.Printf("Physical Node: %d, sent message over mqtt topic %s", p.id, p.statusTopic)
+
+	// send the message over mqtt to the physical node
+
+	err := p.mqttManager.Publish(p.statusTopic, 0, false, receivedPacket)
+	if err != nil {
+		log.Printf("Physical Node %d: error publishing: %v", p.id, err)
+	}
 	var bh packet.BaseHeader
 	if err := bh.DeserialiseBaseHeader(receivedPacket); err != nil {
 		log.Printf("Node %d: failed to deserialize BaseHeader: %v", p.id, err)

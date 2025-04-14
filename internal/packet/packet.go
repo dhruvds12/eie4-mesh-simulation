@@ -19,7 +19,7 @@ const (
 
 const MaxPacketSize = 255
 
-const BROADCAST_ADDR uint32 = 0x0
+const BROADCAST_ADDR uint32 = 0xFFFFFFFF
 
 const MAX_HOPS = 3
 
