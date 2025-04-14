@@ -10,6 +10,7 @@ import (
 	mqtt "mesh-simulation/internal/mqtt"
 	network "mesh-simulation/internal/network"
 	ws "mesh-simulation/internal/server"
+	// node "mesh-simulation/internal/node"
 )
 
 // ----------------------------------------------------------------------------
@@ -45,69 +46,73 @@ func main() {
 	mqttMgr := mqtt.New("tcp://132.145.67.221:1883", "go-simulation")
 	go mqttMgr.Run()
 
-	
 	// Create the event bus.
 	eb := eb.NewEventBus()
-	
+
 	net := network.NewNetwork(eb)
 	go net.Run()
-	
+
 	// Subscribe to a central registration topic where physical nodes announce themselves.
 	if err := mqttMgr.Subscribe("simulation/register", 0, mqtt.ProcessMqttNodeMessage(net, eb)); err != nil {
 		log.Println("Error subscribing:", err)
 	}
 	// Setup WebSocket routes.
 	ws.StartServer(eb, net)
+
+	// simulationV1()
 }
 
 // func simulationV1() {
 // 	//Create the network and start it
-// 	net := network.NewNetwork()
+// 	eb := eb.NewEventBus()
+// 	net := network.NewNetwork(eb)
 // 	go net.Run()
 
 // 	//Create some initial nodes
 // 	// TODO: Needs to change to actual coordinates - this is just for testing
 // 	// TODO: Hopefully setting them as actual coordinates will make it easy to overlay on a map
-// 	nodeA := node.NewNode(0, 0)
-// 	nodeB := node.NewNode(2800, 0)
-// 	nodeC := node.NewNode(1400, 0)
+// 	nodeA := node.NewNode(0, 0, eb)
+
+// 	nodeB := node.NewNode(1000, 0, eb)
+// 	// nodeC := node.NewNode(1400, 0, eb)
 
 // 	//Join the nodes to the network
 // 	net.Join(nodeA)
+// 	// time.Sleep(3*time.Second)
 // 	net.Join(nodeB)
-// 	net.Join(nodeC)
+// 	// net.Join(nodeC)
 
 // 	time.Sleep(1 * time.Second)
 
 // 	// Peer to peer communication between nodes
 // 	nodeA.SendData(net, nodeB.GetID(), "SensorReading=123")
-// 	nodeB.SendData(net, nodeC.GetID(), "SensorReading=456")
+// 	// nodeB.SendData(net, nodeC.GetID(), "SensorReading=456")
 
 // 	time.Sleep(2 * time.Second)
 // 	// Create a new node and join it to the network
-// 	nodeD := node.NewNode(700, 0)
-// 	net.Join(nodeD)
+// 	// nodeD := node.NewNode(700, 0, eb)
+// 	// net.Join(nodeD)
 
 // 	time.Sleep(2 * time.Second)
 
-// 	nodeD.SendData(net, nodeA.GetID(), "Hello A, I'm new here!")
+// 	// nodeD.SendData(net, nodeA.GetID(), "Hello A, I'm new here!")
 
-// 	time.Sleep(2 * time.Second)
-// 	log.Printf("%s is leaving...", nodeB.GetID())
+// 	time.Sleep(10 * time.Second)
+// 	log.Printf("%d is leaving...", nodeB.GetID())
 // 	log.Println()
 // 	net.Leave(nodeB.GetID())
 
 // 	time.Sleep(2 * time.Second)
 // 	// try send data to a node that is not in the network
-// 	nodeD.SendData(net, nodeB.GetID(), "Hello B, I'm new here!")
+// 	// nodeD.SendData(net, nodeB.GetID(), "Hello B, I'm new here!")
 
-// 	time.Sleep(3 * time.Second)
+// 	time.Sleep(10 * time.Second)
 
 // 	log.Println("Shutting down simulation.")
 
 // 	net.Leave(nodeA.GetID())
-// 	net.Leave(nodeC.GetID())
-// 	net.Leave(nodeD.GetID())
+// 	// net.Leave(nodeC.GetID())
+// 	// net.Leave(nodeD.GetID())
 
 // 	time.Sleep(1 * time.Second)
 // }
