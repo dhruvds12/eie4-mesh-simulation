@@ -181,7 +181,7 @@ func (net *networkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packe
 		}
 		if net.IsInRange(sender, nd) {
 			recipients = append(recipients, nd)
-			log.Printf("[Network] Node %q pre-filtered as recipient for msg %d.\n", id, packetID)
+			log.Printf("[Network] Node %d pre-filtered as recipient for msg %d.\n", id, packetID)
 		}
 	}
 
