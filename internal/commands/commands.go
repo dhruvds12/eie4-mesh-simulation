@@ -9,8 +9,6 @@ import (
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/node"
-
-	"github.com/google/uuid"
 )
 
 // CreateNodePayload defines the expected JSON payload for node creation.
@@ -38,7 +36,7 @@ func CreateNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 		bus.Publish(eventBus.Event{
 			Type:      eventBus.EventNodeJoined,
 			NodeID:    newNode.GetID(),
-			Payload:   fmt.Sprintf("Node %s created and joined the network", newNode.GetID()),
+			Payload:   fmt.Sprintf("Node %d created and joined the network", newNode.GetID()),
 			Timestamp: time.Now(),
 			X:         newNode.GetPosition().Lat,
 			Y:         newNode.GetPosition().Long,
@@ -51,7 +49,7 @@ func CreateNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 
 // RemoveNodePayload defines the expected JSON payload for removing a node.
 type RemoveNodePayload struct {
-	NodeID string `json:"node_id"`
+	NodeID uint32 `json:"node_id"`
 }
 
 // RemoveNodeHandler removes a node from the network.
@@ -64,11 +62,7 @@ func RemoveNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 		}
 
 		// Parse the node ID string to a uuid.UUID.
-		nodeID, err := uuid.Parse(payload.NodeID)
-		if err != nil {
-			http.Error(w, "Invalid node_id", http.StatusBadRequest)
-			return
-		}
+		nodeID := payload.NodeID
 
 		// Remove the node from the network.
 		net.Leave(nodeID)
@@ -77,7 +71,7 @@ func RemoveNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 		bus.Publish(eventBus.Event{
 			Type:      eventBus.EventNodeLeft,
 			NodeID:    nodeID,
-			Payload:   fmt.Sprintf("Node %s removed from the network", nodeID),
+			Payload:   fmt.Sprintf("Node %d removed from the network", nodeID),
 			Timestamp: time.Now(),
 			Virtual:   true,
 		})
@@ -87,8 +81,8 @@ func RemoveNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 }
 
 type SendMessagePayload struct {
-	SenderNodeID      string `json:"node_id"`
-	DestinationNodeID string `json:"dest_node_id"`
+	SenderNodeID      uint32 `json:"node_id"`
+	DestinationNodeID uint32 `json:"dest_node_id"`
 	Message           string `json:"message"`
 }
 
@@ -101,17 +95,9 @@ func SendMessageHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerF
 			return
 		}
 
-		nodeID, err := uuid.Parse(payload.SenderNodeID)
-		if err != nil {
-			http.Error(w, "Invalid node_id", http.StatusBadRequest)
-			return
-		}
+		nodeID := payload.SenderNodeID
 
-		destNodeID, err := uuid.Parse(payload.DestinationNodeID)
-		if err != nil {
-			http.Error(w, "Invalid node_id", http.StatusBadRequest)
-			return
-		}
+		destNodeID := payload.DestinationNodeID
 
 		// need to get node and send the message
 		senderNode, err := net.GetNode(nodeID)
@@ -127,7 +113,7 @@ func SendMessageHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerF
 }
 
 type MoveNodePayload struct {
-	NodeID string  `json:"node_id"`
+	NodeID uint32  `json:"node_id"`
 	Lat    float64 `json:"lat"`
 	Long   float64 `json:"long"`
 }
@@ -141,11 +127,7 @@ func MoveNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc
 			return
 		}
 
-		nodeID, err := uuid.Parse(payload.NodeID)
-		if err != nil {
-			http.Error(w, "Invalid node_id", http.StatusBadRequest)
-			return
-		}
+		nodeID := payload.NodeID
 
 		node, err := net.GetNode(nodeID)
 		if err != nil {
@@ -161,7 +143,7 @@ func MoveNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc
 		bus.Publish(eventBus.Event{
 			Type:      eventBus.EventMovedNode,
 			NodeID:    nodeID,
-			Payload:   fmt.Sprintf("Moved Node %s ", nodeID),
+			Payload:   fmt.Sprintf("Moved Node %d ", nodeID),
 			Timestamp: time.Now(),
 			X:         node.GetPosition().Lat,
 			Y:         node.GetPosition().Long,

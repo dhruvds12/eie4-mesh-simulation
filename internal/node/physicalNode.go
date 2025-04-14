@@ -7,7 +7,7 @@ import (
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
-	"mesh-simulation/internal/message"
+	"mesh-simulation/internal/packet"
 	"mesh-simulation/internal/routing"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -56,15 +56,15 @@ func (p *physicalNode) GetID() uint32 {
 
 // Run starts the main processing loop for the physical node.
 func (p *physicalNode) Run(net mesh.INetwork) {
-	log.Printf("Physical Node %s: started.\n", p.id)
-	defer log.Printf("Physical Node %s: stopped.\n", p.id)
+	log.Printf("Physical Node %d: started.\n", p.id)
+	defer log.Printf("Physical Node %d: stopped.\n", p.id)
 
 	// Optionally, subscribe to its command topic using the central MQTT manager.
 	// For example, you might register a dedicated callback that handles commands:
 	token := p.mqttManager.Subscribe(p.commandTopic, 0, p.handleMQTTCommand)
 	token.Wait()
 	if token.Error() != nil {
-		log.Printf("Physical Node %s: error subscribing to command topic: %v", p.id, token.Error())
+		log.Printf("Physical Node %d: error subscribing to command topic: %v", p.id, token.Error())
 	}
 
 	// Process internal messages (which might include translated MQTT events) as well as other events.
@@ -92,22 +92,25 @@ func (p *physicalNode) SendBroadcastInfo(net mesh.INetwork) {
 }
 
 // HandleMessage processes an incoming message.
-func (p *physicalNode) HandleMessage(net mesh.INetwork, msg []byte) {
+func (p *physicalNode) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	// add physical-specific handling.
-	switch msg.GetType() {
-	case message.MsgHello:
-		p.router.HandleMessage(net, p, msg)
-	case message.MsgHelloAck:
-		log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
-			p.id, msg.GetFrom(), msg.GetPayload())
-		p.muNeighbors.Lock()
-		p.neighbors[msg.GetFrom()] = true
-		p.router.AddDirectNeighbor(p.id, msg.GetFrom())
-		p.muNeighbors.Unlock()
-	case message.MsgData, message.MsgRREP, message.MsgRREQ, message.MsgRERR, message.DataAck:
-		p.router.HandleMessage(net, p, msg)
+	var bh packet.BaseHeader
+	if err := bh.DeserialiseBaseHeader(receivedPacket); err != nil {
+		log.Printf("Node %d: failed to deserialize BaseHeader: %v", p.id, err)
+		return
+	}
+	switch bh.PacketType {
+	// case message.MsgHelloAck:
+	// 	log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
+	// 		p.id, msg.GetFrom(), msg.GetPayload())
+	// 	p.muNeighbors.Lock()
+	// 	p.neighbors[msg.GetFrom()] = true
+	// 	p.router.AddDirectNeighbor(p.id, msg.GetFrom())
+	// 	p.muNeighbors.Unlock()
+	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO:
+		p.router.HandleMessage(net, p, receivedPacket)
 	default:
-		log.Printf("Physical Node %s: unknown message type from %s\n", p.id, msg.GetFrom())
+		log.Printf("Physical Node %d: unknown message type from %d\n", p.id, bh.SrcNodeID)
 	}
 }
 
@@ -135,7 +138,7 @@ func (p *physicalNode) SetPosition(coord mesh.Coordinates) {
 func (p *physicalNode) PrintNodeDetails() {
 	fmt.Println("====================================")
 	fmt.Println("Physical Node Details:")
-	fmt.Printf("  ID:          %s\n", p.id)
+	fmt.Printf("  ID:          %d\n", p.id)
 	fmt.Printf("  Coordinates: (Lat: %.2f, Long: %.2f)\n", p.coordinates.Lat, p.coordinates.Long)
 	fmt.Printf("  Command Topic: %s\n", p.commandTopic)
 	fmt.Printf("  Status Topic:  %s\n", p.statusTopic)
@@ -148,7 +151,7 @@ func (p *physicalNode) PrintNodeDetails() {
 	fmt.Println("  Neighbors:")
 	p.muNeighbors.RLock()
 	for neighborID := range p.neighbors {
-		fmt.Printf("    - %s\n", neighborID)
+		fmt.Printf("    - %d\n", neighborID)
 	}
 	p.muNeighbors.RUnlock()
 	fmt.Println("  Router:")
@@ -164,7 +167,7 @@ func (p *physicalNode) PrintNodeDetails() {
 func (p *physicalNode) handleMQTTCommand(client mqtt.Client, msg mqtt.Message) {
 	// In this callback, convert the MQTT message to an internal message format,
 	// then send it on the physical node’s message channel for processing.
-	log.Printf("Physical Node %s received command: %s\n", p.id, msg.Payload())
+	log.Printf("Physical Node %d received command: %d\n", p.id, msg.Payload())
 	/*
 		Create a message type that can handle this
 		- send message on simulation

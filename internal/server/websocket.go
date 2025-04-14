@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"mesh-simulation/internal/commands"
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -51,14 +51,14 @@ func commandHandler(eb *eventBus.EventBus, w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Convert node_id to a uuid.UUID.
-	nodeID, err := uuid.Parse(fmt.Sprintf("%v", cmd["node_id"]))
+	nodeIDStr := fmt.Sprintf("%v", cmd["node_id"]) // Convert to string (even if it's a number in JSON)
+	idUint, err := strconv.ParseUint(nodeIDStr, 10, 32)
 	if err != nil {
 		log.Printf("Invalid node_id: %v", cmd["node_id"])
 		http.Error(w, "Invalid node_id", http.StatusBadRequest)
 		return
 	}
-
+	nodeID := uint32(idUint)
 	// Create an event. Here we define a new event type "COMMAND_RECEIVED" on the fly.
 	event := eventBus.Event{
 		Type:      eventBus.EventType("COMMAND_RECEIVED"),

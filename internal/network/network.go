@@ -91,7 +91,7 @@ func (net *networkImpl) pruneTransmissions() {
 		if now.After(tx.EndTime.Add(TransmissionGrace)) {
 			// For debugging, you might also deliver to any remaining recipients before deletion if desired.
 			delete(net.transmissions, msgID)
-			log.Printf("[Pruner] Removed transmission %s (ended at %v).\n", msgID, tx.EndTime)
+			log.Printf("[Pruner] Removed transmission %d (ended at %v).\n", msgID, tx.EndTime)
 		}
 	}
 }

@@ -9,8 +9,7 @@ import (
 	"mesh-simulation/internal/mesh"
 	"mesh-simulation/internal/node"
 
-	"github.com/eclipse/paho.mqtt.golang"
-	"github.com/google/uuid"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 // ProcessMqttNodeMessage handles messages coming from the "simulation/register" topic.
@@ -33,21 +32,17 @@ func ProcessMqttNodeMessage(net mesh.INetwork, bus *eventBus.EventBus) func(mqtt
 			bus.Publish(eventBus.Event{
 				Type:      eventBus.EventNodeJoined,
 				NodeID:    newNode.GetID(),
-				Payload:   fmt.Sprintf("Physical Node %s registered and joined the network", newNode.GetID()),
+				Payload:   fmt.Sprintf("Physical Node %d registered and joined the network", newNode.GetID()),
 				Timestamp: time.Now(),
 				X:         newNode.GetPosition().Lat,
 				Y:         newNode.GetPosition().Long,
-				Virtual:    false,
+				Virtual:   false,
 			})
-			fmt.Printf("Node %s registered successfully\n", newNode.GetID())
+			fmt.Printf("Node %d registered successfully\n", newNode.GetID())
 
 		case "remove":
 			// Remove the node from the network.
-			nodeID, err := uuid.Parse(payload.NodeID)
-			if err != nil {
-				fmt.Printf("Invalid node_id %s: %v\n", payload.NodeID, err)
-				return
-			}
+			nodeID := payload.NodeID
 
 			net.Leave(nodeID)
 
@@ -55,11 +50,11 @@ func ProcessMqttNodeMessage(net mesh.INetwork, bus *eventBus.EventBus) func(mqtt
 			bus.Publish(eventBus.Event{
 				Type:      eventBus.EventNodeLeft,
 				NodeID:    nodeID,
-				Payload:   fmt.Sprintf("Physical Node %s removed from the network", payload.NodeID),
+				Payload:   fmt.Sprintf("Physical Node %d removed from the network", payload.NodeID),
 				Timestamp: time.Now(),
-				Virtual:    false,
+				Virtual:   false,
 			})
-			fmt.Printf("Node %s removed successfully\n", payload.NodeID)
+			fmt.Printf("Node %d removed successfully\n", payload.NodeID)
 
 		default:
 			fmt.Printf("Unknown event type: %s\n", payload.Event)

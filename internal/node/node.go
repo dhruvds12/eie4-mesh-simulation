@@ -8,9 +8,8 @@ import (
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
-	"mesh-simulation/internal/message"
-	"mesh-simulation/internal/routing"
 	"mesh-simulation/internal/packet"
+	"mesh-simulation/internal/routing"
 )
 
 // nodeImpl is a concrete implementation of INode.
@@ -33,7 +32,7 @@ type nodeImpl struct {
 func NewNode(lat, long float64, bus *eventBus.EventBus) mesh.INode {
 	nodeID := rand.Int31()
 	var nodeIdInt = uint32(nodeID)
-	log.Printf("[sim] Created new node ID: %s, x: %f, y: %f", nodeID, lat, long)
+	log.Printf("[sim] Created new node ID: %d, x: %f, y: %f", nodeID, lat, long)
 	return &nodeImpl{
 		id:             nodeIdInt,
 		coordinates:    mesh.CreateCoordinates(lat, long),
@@ -53,8 +52,8 @@ func (n *nodeImpl) GetID() uint32 {
 
 // Run is the main goroutine for the node, processing incoming messages.
 func (n *nodeImpl) Run(net mesh.INetwork) {
-	log.Printf("Node %s: started.\n", n.id)
-	defer log.Printf("Node %s: stopped.\n", n.id)
+	log.Printf("Node %d: started.\n", n.id)
+	defer log.Printf("Node %d: stopped.\n", n.id)
 
 	if aodv, ok := n.router.(*routing.AODVRouter); ok {
 		aodv.StartPendingTxChecker(net, n)
@@ -117,23 +116,21 @@ func (n *nodeImpl) SendBroadcastInfo(net mesh.INetwork) {
 func (n *nodeImpl) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	var bh packet.BaseHeader
 	if err := bh.DeserialiseBaseHeader(receivedPacket); err != nil {
-		log.Printf("Node %s: failed to deserialize BaseHeader: %v", n.id, err)
+		log.Printf("Node %d: failed to deserialize BaseHeader: %v", n.id, err)
 		return
 	}
 	switch bh.PacketType {
-	case message.MsgHello:
-		n.router.HandleMessage(net, n, msg)
-	case message.MsgHelloAck: // TODO why is this separate to data ack -> should all fall under ack
-		log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
-			n.id, msg.GetFrom(), msg.GetPayload())
-		n.muNeighbors.Lock()
-		n.neighbors[bh.SrcNodeID] = true
-		n.router.AddDirectNeighbor(n.id, bh.SrcNodeID)
-		n.muNeighbors.Unlock()
-	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, message.DataAck:
-		n.router.HandleMessage(net, n, msg)
+	// case message.MsgHelloAck: // TODO why is this separate to data ack -> should all fall under ack
+	// 	log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
+	// 		n.id, msg.GetFrom(), msg.GetPayload())
+	// 	n.muNeighbors.Lock()
+	// 	n.neighbors[bh.SrcNodeID] = true
+	// 	n.router.AddDirectNeighbor(n.id, bh.SrcNodeID)
+	// 	n.muNeighbors.Unlock()
+	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO:
+		n.router.HandleMessage(net, n, receivedPacket)
 	default:
-		log.Printf("Node %s: unknown message type from %d\n", n.id, bh.SrcNodeID)
+		log.Printf("Node %d: unknown message type from %d\n", n.id, bh.SrcNodeID)
 	}
 }
 
@@ -188,7 +185,7 @@ func (n *nodeImpl) SetPosition(coord mesh.Coordinates) {
 func (n *nodeImpl) PrintNodeDetails() {
 	fmt.Println("====================================")
 	fmt.Println("Node Details:")
-	fmt.Printf("  ID:          %s\n", n.id)
+	fmt.Printf("  ID:          %d\n", n.id)
 	fmt.Printf("  Coordinates: (Lat: %.2f, Long: %.2f)\n", n.coordinates.Lat, n.coordinates.Long)
 	fmt.Printf("  Messages:    %d messages in queue\n", len(n.messages))
 	fmt.Printf("  Quit Signal: %v\n", n.quit != nil)
@@ -199,7 +196,7 @@ func (n *nodeImpl) PrintNodeDetails() {
 	fmt.Println("  Neighbors:")
 	n.muNeighbors.RLock()
 	for neighborID := range n.neighbors {
-		fmt.Printf("    - %s\n", neighborID)
+		fmt.Printf("    - %d\n", neighborID)
 	}
 	n.muNeighbors.RUnlock()
 	fmt.Println("  Router:")
