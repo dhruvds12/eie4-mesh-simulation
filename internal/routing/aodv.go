@@ -18,25 +18,12 @@ TODO:
 -Implement RERR (route error) messages when route is broken
 */
 
-// AODVControl is extra data for RREQ/RREP
-type AODVControl struct {
-	Source      uint32
-	Destination uint32
-	HopCount    int
-}
 
 // RouteEntry stores route info
 type RouteEntry struct {
 	Destination uint32
 	NextHop     uint32
 	HopCount    int
-}
-
-type RERRControl struct {
-	BrokenNode    uint32
-	MessageDest   uint32
-	MessageId     string
-	MessageSource uint32
 }
 
 // Used to store transactions that are pending ACKs
@@ -46,10 +33,6 @@ type PendingTx struct {
 	PotentialBrokenNode uint32 // (the broken node)
 	Origin              uint32 // original source of the data
 	ExpiryTime          time.Time
-}
-
-type DataAckPayload struct {
-	MsgID string
 }
 
 // AODVRouter is a per-node router
@@ -200,17 +183,21 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 	}
 	switch bh.PacketType {
 	case packet.PKT_BROADCAST_INFO:
+		log.Printf("Node %d: received BroadcastInfo\n", r.ownerID)
 		r.handleBroadcastInfo(net, node, receivedPacket)
 	case packet.PKT_RREQ:
 		// All nodes who recieve should handle
+		log.Printf("Node %d: received PKT_RREQ\n", r.ownerID)
 		r.handleRREQ(net, node, receivedPacket)
 	case packet.PKT_RREP:
 		// Only the intended recipient should handle
+		log.Printf("Node %d: received PKT_RREP\n", r.ownerID)
 		if bh.DestNodeID == r.ownerID {
 			r.handleRREP(net, node, receivedPacket)
 		}
 	case packet.PKT_RERR:
 		// All nodes who recieve should handle
+		log.Printf("Node %d: received PKT_RERR\n", r.ownerID)
 		r.handleRERR(net, node, receivedPacket)
 	case packet.PKT_ACK: // was data ack can be generalised
 		// Only the intended recipient should handle
@@ -304,7 +291,7 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, rec
 
 	neighborID := bh.SrcNodeID
 
-	log.Printf("[sim] Node %d: received HELLO from %d, payload=NO PAYLOAD\n",
+	log.Printf("[sim] Node %d: received BROADCAST INFO from %d, payload=NO PAYLOAD\n",
 		nodeID, neighborID)
 
 	// Add the sender to the list of neighbors
@@ -680,6 +667,7 @@ func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uint32, 
 	route, ok := r.routeTable[to]
 	if !ok {
 		log.Printf("[sim] Node %d: no route to send data ack destined for %d.\n", r.ownerID, to)
+		return
 	}
 
 	ackPacket, packetID, err := packet.CreateACKPacket(r.ownerID, to, route.NextHop, prevMsgId, 0)
