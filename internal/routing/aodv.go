@@ -18,7 +18,6 @@ TODO:
 -Implement RERR (route error) messages when route is broken
 */
 
-
 // RouteEntry stores route info
 type RouteEntry struct {
 	Destination uint32
@@ -297,8 +296,8 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, rec
 	// Add the sender to the list of neighbors
 	r.AddDirectNeighbor(nodeID, bh.SrcNodeID)
 	// If I am not the original sender of this message add the route to origin and forward
-	if (ih.OriginNodeID != r.ownerID) {
-		r.maybeAddRoute(ih.OriginNodeID, bh.SrcNodeID, int(bh.HopCount))		
+	if ih.OriginNodeID != r.ownerID {
+		r.maybeAddRoute(ih.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
 		if bh.HopCount < packet.MAX_HOPS {
 			sendPacket, packetID, err := packet.CreateBroadcastInfoPacket(nodeID, ih.OriginNodeID, bh.HopCount+1, bh.PacketID)
 			if err != nil {
