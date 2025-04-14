@@ -15,6 +15,9 @@ const (
 	LoRaAirTime       = 300 * time.Millisecond // Duration a transmission is on air
 	PruneInterval     = 3 * time.Second        // How often to run the pruner
 	TransmissionGrace = 500 * time.Millisecond // How long after end time to keep transmissions
+	// TransmissionGrace required as txs are handled one by one if 1 transmission starts and another starts <300ms after the
+	// first transmission would be removed before the check for a collision is completed therefore 2nd transmission would
+	// also be delivered
 )
 
 // Struct to hold the transmission details
@@ -25,6 +28,7 @@ type Transmission struct {
 	StartTime  time.Time
 	EndTime    time.Time
 	Recipients []mesh.INode
+	Active     bool
 }
 
 // timesOverlap returns true if the intervals [s1,e1) and [s2,e2) overlap.
@@ -128,6 +132,20 @@ func (net *networkImpl) LeaveAll() {
 // sees any overlapping transmission. If so, delivery is skipped for that node; otherwise, delivered.
 func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode) {
 	// For each recipient from our pre-filtered list:
+	// set inactive
+	net.mu.Lock()
+	tx.Active = false
+	net.mu.Unlock()
+
+	// Now, use a read lock for iterating over transmissions.
+	net.mu.RLock()
+	// Copy the relevant data from net.transmissions to minimise the lock duration.
+	transmissionsSnapshot := make([]*Transmission, 0, len(net.transmissions))
+	for _, otherTx := range net.transmissions {
+		transmissionsSnapshot = append(transmissionsSnapshot, otherTx)
+	}
+	net.mu.RUnlock()
+
 	for _, nd := range tx.Recipients {
 		// Check again that the node is still in range (e.g. if nodes move).
 		if !net.IsInRange(sender, nd) {
@@ -139,7 +157,7 @@ func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 		// Now, iterate over all transmissions in the global map.
 		// (Because we do not delete finished transmissions immediately, even later transmissions
 		// that started after tx but finished later will still be visible.)
-		for _, otherTx := range net.transmissions {
+		for _, otherTx := range transmissionsSnapshot {
 			// Skip self.
 			if otherTx == tx {
 				continue
@@ -193,6 +211,7 @@ func (net *networkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packe
 		StartTime:  start,
 		EndTime:    end,
 		Recipients: recipients,
+		Active:     true,
 	}
 
 	// Store the transmission.
@@ -203,10 +222,8 @@ func (net *networkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packe
 	// We schedule a callback with time.AfterFunc to deliver the message as soon as its airtime is finished.
 	// Note: We do not delete the transmission here. The pruner will remove it after TransmissionGrace has elapsed.
 	time.AfterFunc(LoRaAirTime, func() {
-		net.mu.Lock()
 		// Deliver to recipients using a detailed per-node collision check.
 		net.deliverIfNoCollision(tx, sender)
-		net.mu.Unlock()
 	})
 }
 
@@ -284,7 +301,7 @@ func (net *networkImpl) IsChannelFree(node mesh.INode) bool {
 	net.mu.RLock()
 	defer net.mu.RUnlock()
 	for _, tx := range net.transmissions {
-		if net.IsInRange(node, tx.Sender) {
+		if tx.Active && net.IsInRange(node, tx.Sender) {
 			return false
 		}
 	}
