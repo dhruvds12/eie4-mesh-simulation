@@ -467,7 +467,7 @@ func CreateBroadcastInfoPacket(srcID, originNode uint32, numHops uint8, packetID
 		DestNodeID: BROADCAST_ADDR,
 		SrcNodeID:  srcID,
 		PacketID:   pid,
-		PacketType: PKT_ACK,
+		PacketType: PKT_BROADCAST_INFO,
 		Flags:      0x0,
 		HopCount:   numHops,
 		Reserved:   0x0,
