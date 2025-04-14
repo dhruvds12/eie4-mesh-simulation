@@ -296,15 +296,18 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, rec
 
 	// Add the sender to the list of neighbors
 	r.AddDirectNeighbor(nodeID, bh.SrcNodeID)
-	r.maybeAddRoute(ih.OriginNodeID, bh.SrcNodeID, int(bh.HopCount))
-	if bh.HopCount < packet.MAX_HOPS {
-		sendPacket, packetID, err := packet.CreateBroadcastInfoPacket(nodeID, ih.OriginNodeID, bh.HopCount+1, bh.PacketID)
-		if err != nil {
-			log.Printf("Error in create broadcastInfoPacket: %q", err)
-		}
+	// If I am not the original sender of this message add the route to origin and forward
+	if (ih.OriginNodeID != r.ownerID) {
+		r.maybeAddRoute(ih.OriginNodeID, bh.SrcNodeID, int(bh.HopCount))		
+		if bh.HopCount < packet.MAX_HOPS {
+			sendPacket, packetID, err := packet.CreateBroadcastInfoPacket(nodeID, ih.OriginNodeID, bh.HopCount+1, bh.PacketID)
+			if err != nil {
+				log.Printf("Error in create broadcastInfoPacket: %q", err)
+			}
 
-		r.broadcastMessageCSMA(net, node, sendPacket, packetID)
-		// No longer send ACK for broadcasts as this will flood the network also BroadcastInfo in hardware is periodic
+			r.broadcastMessageCSMA(net, node, sendPacket, packetID)
+			// No longer send ACK for broadcasts as this will flood the network also BroadcastInfo in hardware is periodic
+		}
 	}
 }
 
