@@ -1,17 +1,37 @@
 package node
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
-	"mesh-simulation/internal/packet"
 	"mesh-simulation/internal/routing"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/vmihailenco/msgpack/v5"
 )
+
+// Constants for actions—should match those used in hardware.
+const (
+	ACTION_MESSAGE          uint8 = 0x01
+	ACTION_UPDATE_ROUTE     uint8 = 0x02
+	ACTION_INVALIDATE_ROUTE uint8 = 0x03
+)
+
+// NodeCommand represents a command sent from the hardware node.
+type NodeCommand struct {
+	Action      uint8  `json:"action" msgpack:"action"`
+	Destination uint32 `json:"destination,omitempty" msgpack:"destination,omitempty"`
+	NextHop     uint32 `json:"next_hop,omitempty" msgpack:"next_hop,omitempty"`
+	HopCount    uint8  `json:"hop_count,omitempty" msgpack:"hop_count,omitempty"`
+	PacketID    uint32 `json:"packet_id,omitempty" msgpack:"packet_id,omitempty"`
+	Payload    []byte `json:"payload,omitempty" msgpack:"payload,omitempty"`
+	PayloadLen uint32 `json:"payload_len,omitempty" msgpack:"payload_len,omitempty"`
+}
 
 // physicalNode is a concrete implementation of INode for physical nodes.
 type physicalNode struct {
@@ -94,10 +114,10 @@ func (p *physicalNode) SendBroadcastInfo(net mesh.INetwork) {
 // HandleMessage processes an incoming message.
 func (p *physicalNode) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	// add physical-specific handling.
-	fmt.Printf("Payload (hex): %x\n", receivedPacket)
-	fmt.Printf("Payload: %v\n", receivedPacket)
-	payloadString := string(receivedPacket)
-	fmt.Printf("Payload: %v\n", payloadString)
+	// fmt.Printf("Payload (hex): %x\n", receivedPacket)
+	// fmt.Printf("Payload: %v\n", receivedPacket)
+	// payloadString := string(receivedPacket)
+	// fmt.Printf("Payload: %v\n", payloadString)
 
 	log.Printf("Physical Node: %d, sent message over mqtt topic %s", p.id, p.statusTopic)
 
@@ -107,24 +127,24 @@ func (p *physicalNode) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	if err != nil {
 		log.Printf("Physical Node %d: error publishing: %v", p.id, err)
 	}
-	var bh packet.BaseHeader
-	if err := bh.DeserialiseBaseHeader(receivedPacket); err != nil {
-		log.Printf("Node %d: failed to deserialize BaseHeader: %v", p.id, err)
-		return
-	}
-	switch bh.PacketType {
-	// case message.MsgHelloAck:
-	// 	log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
-	// 		p.id, msg.GetFrom(), msg.GetPayload())
-	// 	p.muNeighbors.Lock()
-	// 	p.neighbors[msg.GetFrom()] = true
-	// 	p.router.AddDirectNeighbor(p.id, msg.GetFrom())
-	// 	p.muNeighbors.Unlock()
-	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO:
-		p.router.HandleMessage(net, p, receivedPacket)
-	default:
-		log.Printf("Physical Node %d: unknown message type from %d\n", p.id, bh.SrcNodeID)
-	}
+	// var bh packet.BaseHeader
+	// if err := bh.DeserialiseBaseHeader(receivedPacket); err != nil {
+	// 	log.Printf("Node %d: failed to deserialize BaseHeader: %v", p.id, err)
+	// 	return
+	// }
+	// switch bh.PacketType {
+	// // case message.MsgHelloAck:
+	// // 	log.Printf("[sim] Node %s: received HELLO_ACK from %s, payload=%q\n",
+	// // 		p.id, msg.GetFrom(), msg.GetPayload())
+	// // 	p.muNeighbors.Lock()
+	// // 	p.neighbors[msg.GetFrom()] = true
+	// // 	p.router.AddDirectNeighbor(p.id, msg.GetFrom())
+	// // 	p.muNeighbors.Unlock()
+	// case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO:
+	// 	p.router.HandleMessage(net, p, receivedPacket)
+	// default:
+	// 	log.Printf("Physical Node %d: unknown message type from %d\n", p.id, bh.SrcNodeID)
+	// }
 }
 
 // GetMessageChan returns the message channel.
@@ -178,14 +198,54 @@ func (p *physicalNode) PrintNodeDetails() {
 
 // handleMQTTCommand processes MQTT messages sent to this node's command topic.
 func (p *physicalNode) handleMQTTCommand(client mqtt.Client, msg mqtt.Message) {
-	// In this callback, convert the MQTT message to an internal message format,
-	// then send it on the physical node’s message channel for processing.
-	log.Printf("Physical Node %d received command: %d\n", p.id, msg.Payload())
-	/*
-		Create a message type that can handle this
-		- send message on simulation
-		- add to routing table
-		- remove from routing table
-		- move?
-	*/
+	rawPayload := msg.Payload()
+	// Print the raw bytes in hexadecimal
+	log.Printf("Physical Node %d: Raw MQTT message bytes: % x", p.id, rawPayload)
+
+	// Also, print the raw message as a string (if printable)
+	log.Printf("Physical Node %d: Raw MQTT message string: %s", p.id, rawPayload)
+	payload := bytes.TrimRight(msg.Payload(), "\x00")
+
+	var cmd NodeCommand
+
+	// First, try decoding as JSON.
+	err := json.Unmarshal(payload, &cmd)
+	if err != nil {
+		log.Printf("Physical Node %d: error decoding MQTT command (JSON failed): %v", p.id, err)
+		// If JSON decoding fails, try MessagePack.
+		err = msgpack.Unmarshal(payload, &cmd)
+		if err != nil {
+			log.Printf("Physical Node %d: error decoding MQTT command (JSON & MessagePack failed): %v", p.id, err)
+			return
+		}
+	}
+
+	log.Printf("Physical Node %d received command: %+v", p.id, cmd)
+
+	log.Printf("Physical Node %d received command: %+v", p.id, cmd)
+
+	// Now switch on the action.
+	switch cmd.Action {
+	case ACTION_UPDATE_ROUTE:
+		// Handle route update.
+		// For example, publish an event or update the routing table.
+		log.Printf("Physical Node %d: Update Route - destination: %d, nextHop: %d, hopCount: %d",
+			p.id, cmd.Destination, cmd.NextHop, cmd.HopCount)
+
+	case ACTION_INVALIDATE_ROUTE:
+		// Handle route invalidation.
+		log.Printf("Physical Node %d: Invalidate Route - destination: %d", p.id, cmd.Destination)
+
+	case ACTION_MESSAGE:
+		// Handle a packet (message) command.
+		// In this case, we assume that the packet command was sent via MessagePack,
+		// so cmd.Payload contains the raw binary packet.
+		log.Printf("Physical Node %d: Received message command - packet_id: %d, payload length: %d",
+			p.id, cmd.PacketID, cmd.PayloadLen)
+		// Dispatch the message for further processing.
+		// Here you could call your router's HandleMessage or publish an event.
+
+	default:
+		log.Printf("Physical Node %d: unknown command action: %d", p.id, cmd.Action)
+	}
 }

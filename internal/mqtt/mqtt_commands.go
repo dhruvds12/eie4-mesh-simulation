@@ -12,6 +12,7 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
+// potentially need to store connections and mark them as active to handle disconnections
 // ProcessMqttNodeMessage handles messages coming from the "simulation/register" topic.
 func ProcessMqttNodeMessage(net mesh.INetwork, bus *eventBus.EventBus) func(mqtt.Client, mqtt.Message) {
 	return func(client mqtt.Client, msg mqtt.Message) {
