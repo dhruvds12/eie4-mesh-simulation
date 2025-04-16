@@ -29,8 +29,8 @@ type NodeCommand struct {
 	NextHop     uint32 `json:"next_hop,omitempty" msgpack:"next_hop,omitempty"`
 	HopCount    uint8  `json:"hop_count,omitempty" msgpack:"hop_count,omitempty"`
 	PacketID    uint32 `json:"packet_id,omitempty" msgpack:"packet_id,omitempty"`
-	Payload    []byte `json:"payload,omitempty" msgpack:"payload,omitempty"`
-	PayloadLen uint32 `json:"payload_len,omitempty" msgpack:"payload_len,omitempty"`
+	Payload     []byte `json:"payload,omitempty" msgpack:"payload,omitempty"`
+	PayloadLen  uint32 `json:"payload_len,omitempty" msgpack:"payload_len,omitempty"`
 }
 
 // physicalNode is a concrete implementation of INode for physical nodes.
@@ -47,6 +47,7 @@ type physicalNode struct {
 	neighbors      map[uint32]bool
 	seenBroadcasts map[string]bool
 	eventBus       *eventBus.EventBus
+	net            mesh.INetwork
 }
 
 // NewPhysicalNode creates a new physical node using parameters received via MQTT registration.
@@ -76,6 +77,7 @@ func (p *physicalNode) GetID() uint32 {
 
 // Run starts the main processing loop for the physical node.
 func (p *physicalNode) Run(net mesh.INetwork) {
+	p.net = net
 	log.Printf("Physical Node %d: started.\n", p.id)
 	defer log.Printf("Physical Node %d: stopped.\n", p.id)
 
@@ -229,11 +231,13 @@ func (p *physicalNode) handleMQTTCommand(client mqtt.Client, msg mqtt.Message) {
 	case ACTION_UPDATE_ROUTE:
 		// Handle route update.
 		// For example, publish an event or update the routing table.
+		p.router.AddRouteEntry(cmd.Destination, cmd.NextHop, int(cmd.HopCount))
 		log.Printf("Physical Node %d: Update Route - destination: %d, nextHop: %d, hopCount: %d",
 			p.id, cmd.Destination, cmd.NextHop, cmd.HopCount)
 
 	case ACTION_INVALIDATE_ROUTE:
 		// Handle route invalidation.
+		p.router.RemoveRouteEntry(cmd.Destination)
 		log.Printf("Physical Node %d: Invalidate Route - destination: %d", p.id, cmd.Destination)
 
 	case ACTION_MESSAGE:
@@ -242,8 +246,8 @@ func (p *physicalNode) handleMQTTCommand(client mqtt.Client, msg mqtt.Message) {
 		// so cmd.Payload contains the raw binary packet.
 		log.Printf("Physical Node %d: Received message command - packet_id: %d, payload length: %d",
 			p.id, cmd.PacketID, cmd.PayloadLen)
-		// Dispatch the message for further processing.
-		// Here you could call your router's HandleMessage or publish an event.
+		// Dispatch the message
+		p.router.BroadcastMessageCSMA(p.net, p, cmd.Payload, cmd.PacketID)
 
 	default:
 		log.Printf("Physical Node %d: unknown command action: %d", p.id, cmd.Action)

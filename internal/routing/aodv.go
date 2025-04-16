@@ -231,24 +231,9 @@ func (r *AODVRouter) AddDirectNeighbor(nodeID, neighborID uint32) {
 	// If we don't have a route, or if this is a shorter route
 	existing, exists := r.routeTable[neighborID]
 	if !exists || (exists && existing.HopCount > 1) {
-		re := RouteEntry{
-			Destination: neighborID,
-			NextHop:     neighborID,
-			HopCount:    1,
-		}
-		r.routeTable[neighborID] = &re
-		log.Printf("[sim] [routing table] Node %d (router) -> direct neighbor: %d\n", r.ownerID, neighborID)
 
-		r.eventBus.Publish(eventBus.Event{
-			Type:   eventBus.EventAddRouteEntry,
-			NodeID: r.ownerID,
-			RoutingTableEntry: eventBus.RouteEntry{
-				Destination: re.Destination,
-				NextHop:     re.NextHop,
-				HopCount:    re.HopCount,
-			},
-			Timestamp: time.Now(),
-		})
+		r.AddRouteEntry(neighborID, neighborID, 1)
+		log.Printf("[sim] [routing table] Node %d (router) -> direct neighbor: %d\n", r.ownerID, neighborID)
 	}
 }
 
@@ -269,7 +254,64 @@ func (r *AODVRouter) SendBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 
 	}
 	// net.BroadcastMessage(m, node)
-	r.broadcastMessageCSMA(net, node, infoPacket, packetID)
+	r.BroadcastMessageCSMA(net, node, infoPacket, packetID)
+}
+
+func (r *AODVRouter) AddRouteEntry(dest, nextHop uint32, hopCount int) {
+	re := RouteEntry{
+		Destination: dest,
+		NextHop:     nextHop,
+		HopCount:    hopCount,
+	}
+
+	r.routeTable[dest] = &re
+
+	r.eventBus.Publish(eventBus.Event{
+		Type:   eventBus.EventAddRouteEntry,
+		NodeID: r.ownerID,
+		RoutingTableEntry: eventBus.RouteEntry{
+			Destination: dest,
+			NextHop:     nextHop,
+			HopCount:    1,
+		},
+		Timestamp: time.Now(),
+	})
+
+}
+
+func (r *AODVRouter) RemoveRouteEntry(dest uint32) {
+	route := r.routeTable[dest]
+
+	delete(r.routeTable, dest)
+	r.eventBus.Publish(eventBus.Event{
+		Type:   eventBus.EventRemoveRouteEntry,
+		NodeID: r.ownerID,
+		RoutingTableEntry: eventBus.RouteEntry{
+			Destination: route.Destination,
+			NextHop:     route.NextHop,
+			HopCount:    route.HopCount,
+		},
+		Timestamp: time.Now(),
+	})
+
+}
+
+// Check that channel is free before sending data to the network
+// Will call the broadcast function in the network to send the message to all nodes
+func (r *AODVRouter) BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, sendPacket []byte, packetID uint32) {
+	backoff := 100 * time.Millisecond
+	// Check if the channel is busy
+	for !net.IsChannelFree(sender) {
+		waitTime := time.Duration(1+rand.Intn(int(backoff/time.Millisecond))) * time.Millisecond
+		log.Printf("[CSMA] Node %d: Channel busy. Waiting for %v before retrying.\n", r.ownerID, waitTime)
+		time.Sleep(waitTime)
+		backoff *= 2
+		if backoff > 2*time.Second {
+			backoff = 2 * time.Second
+		}
+	}
+	log.Printf("[CSMA] Node %d: Channel is free. Broadcasting message.\n", r.ownerID)
+	net.BroadcastMessage(sendPacket, sender, packetID)
 }
 
 // -- Private AODV logic --
@@ -304,29 +346,12 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, rec
 				log.Printf("Error in create broadcastInfoPacket: %q", err)
 			}
 
-			r.broadcastMessageCSMA(net, node, sendPacket, packetID)
+			r.BroadcastMessageCSMA(net, node, sendPacket, packetID)
 			// No longer send ACK for broadcasts as this will flood the network also BroadcastInfo in hardware is periodic
 		}
 	}
 }
 
-// Check that channel is free before sending data to the network
-// Will call the broadcast function in the network to send the message to all nodes
-func (r *AODVRouter) broadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, sendPacket []byte, packetID uint32) {
-	backoff := 100 * time.Millisecond
-	// Check if the channel is busy
-	for !net.IsChannelFree(sender) {
-		waitTime := time.Duration(1+rand.Intn(int(backoff/time.Millisecond))) * time.Millisecond
-		log.Printf("[CSMA] Node %d: Channel busy. Waiting for %v before retrying.\n", r.ownerID, waitTime)
-		time.Sleep(waitTime)
-		backoff *= 2
-		if backoff > 2*time.Second {
-			backoff = 2 * time.Second
-		}
-	}
-	log.Printf("[CSMA] Node %d: Channel is free. Broadcasting message.\n", r.ownerID)
-	net.BroadcastMessage(sendPacket, sender, packetID)
-}
 
 func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID uint32) {
 	rreqPacket, packetID, err := packet.CreateRREQPacket(r.ownerID, destID, r.ownerID, 0)
@@ -336,7 +361,7 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 	}
 	log.Printf("[sim] [RREQ init] Node %d (router) -> initiating RREQ for %d (hop count %d)\n", r.ownerID, destID, 0)
 	// net.BroadcastMessage(rreqMsg, sender)
-	r.broadcastMessageCSMA(net, sender, rreqPacket, packetID)
+	r.BroadcastMessageCSMA(net, sender, rreqPacket, packetID)
 }
 
 // Every Node needs to handle this
@@ -372,7 +397,7 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 	log.Printf("[sim] [RREQ FORWARD] Node %d: forwarding RREQ for %d (hop count %d)\n", r.ownerID, rh.RREQDestNodeID, bh.HopCount)
 	// net.BroadcastMessage(fwdMsg, node)
-	r.broadcastMessageCSMA(net, node, fwdRREQ, packetId)
+	r.BroadcastMessageCSMA(net, node, fwdRREQ, packetId)
 }
 
 // ONLY use to initate rrep
@@ -389,7 +414,7 @@ func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, destRREP, sour
 	}
 	log.Printf("[sim] [RREP] Node %d: sending RREP to %d via %d current hop count: %d\n", r.ownerID, destRREP, reverseRoute.NextHop, hopCount)
 	// net.BroadcastMessage(rrepMsg, node)
-	r.broadcastMessageCSMA(net, node, rrepPacket, packetID)
+	r.BroadcastMessageCSMA(net, node, rrepPacket, packetID)
 }
 
 // Only node specified in the RREP message should handle this
@@ -431,7 +456,7 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 	log.Printf("[RREP FORWARD] Node %d: forwarding RREP to %d via %d\n", r.ownerID, rreph.RREPDestNodeID, reverseRoute.NextHop)
 	// net.BroadcastMessage(fwdRrep, node)
-	r.broadcastMessageCSMA(net, node, rrepPacket, packetID)
+	r.BroadcastMessageCSMA(net, node, rrepPacket, packetID)
 }
 
 // ONLY use for initial rerr not suitable for forwarding
@@ -446,7 +471,7 @@ func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uint32, dat
 
 	log.Printf("[sim] Node %d: sending RERR to %d about broken route for %d.\n", r.ownerID, to, dataDest)
 	// net.BroadcastMessage(rerrMsg, node)
-	r.broadcastMessageCSMA(net, node, rerrPacket, packetID)
+	r.BroadcastMessageCSMA(net, node, rerrPacket, packetID)
 }
 
 // Everyone who receives RERR should handle this (only intended recipient should forward to source) (source should not forward)
@@ -494,7 +519,7 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 	log.Printf("[sim] Node %d: sending RERR to %d about broken route for %d.\n", r.ownerID, nexthop, rerrHeader.OriginalDestNodeID)
 	// net.BroadcastMessage(rerrMsg, node)
-	r.broadcastMessageCSMA(net, node, rerrPacket, packetID)
+	r.BroadcastMessageCSMA(net, node, rerrPacket, packetID)
 	// Message source is in the payload, use existing route to forward RERR
 	// This is a simplification, in real AODV we might need to store the "previous hop" for each route
 
@@ -561,7 +586,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 
 	log.Printf("[sim] Node %d: forwarding DATA from %d to %d via %d\n", r.ownerID, bh.SrcNodeID, dest, route.NextHop)
 	// net.BroadcastMessage(fwdMsg, node)
-	r.broadcastMessageCSMA(net, node, dataPacket, packetID)
+	r.BroadcastMessageCSMA(net, node, dataPacket, packetID)
 
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
 	if route.NextHop == dest {
@@ -679,7 +704,7 @@ func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uint32, 
 	}
 
 	log.Printf("[sim] Node %d: sending DATA_ACK to %d\n", r.ownerID, to)
-	r.broadcastMessageCSMA(net, node, ackPacket, packetID)
+	r.BroadcastMessageCSMA(net, node, ackPacket, packetID)
 }
 
 // maybeAddRoute updates route if shorter
@@ -689,22 +714,6 @@ func (r *AODVRouter) maybeAddRoute(dest, nextHop uint32, hopCount int) {
 		// log an update to the routing table
 		log.Printf("[sim] [routing table] Node %d (router) -> updated route to %d via %d (hop count %d)\n", r.ownerID, dest, nextHop, hopCount)
 
-		re := RouteEntry{
-			Destination: dest,
-			NextHop:     nextHop,
-			HopCount:    hopCount,
-		}
-		r.routeTable[dest] = &re
-
-		r.eventBus.Publish(eventBus.Event{
-			Type:   eventBus.EventAddRouteEntry,
-			NodeID: r.ownerID,
-			RoutingTableEntry: eventBus.RouteEntry{
-				Destination: re.Destination,
-				NextHop:     re.NextHop,
-				HopCount:    re.HopCount,
-			},
-			Timestamp: time.Now(),
-		})
+		r.AddRouteEntry(dest, nextHop, hopCount)
 	}
 }

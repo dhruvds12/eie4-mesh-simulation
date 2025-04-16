@@ -27,4 +27,12 @@ type IRouter interface {
 
 	// Stop the router's Tx check go routine
 	StopPendingTxChecker()
+
+	// Add item to routing table
+	AddRouteEntry(dest, nextHop uint32, hopCount int)
+
+	// Remove item from routing table
+	RemoveRouteEntry(dest uint32)
+
+	BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, sendPacket []byte, packetID uint32)
 }
