@@ -25,7 +25,7 @@ func ProcessMqttNodeMessage(net mesh.INetwork, bus *eventBus.EventBus) func(mqtt
 		switch payload.Event {
 		case "register":
 			// Create a new physical node based on the registration payload.
-			newNode := node.NewPhysicalNode(payload.NodeID, payload.CommandTopic, payload.StatusTopic, payload.Lat, payload.Long, bus, client)
+			newNode := node.NewPhysicalNode(payload.NodeID, payload.CommandTopic, payload.ProcessTopic, payload.SendTopic, payload.Lat, payload.Long, bus, client)
 			// Add the new node to the network.
 			net.Join(newNode)
 

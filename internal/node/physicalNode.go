@@ -40,7 +40,8 @@ type physicalNode struct {
 	messages       chan []byte
 	quit           chan struct{}
 	commandTopic   string
-	statusTopic    string
+	processTopic   string
+	sendTopic      string
 	router         routing.IRouter
 	mqttManager    mqtt.Client
 	muNeighbors    sync.RWMutex
@@ -51,7 +52,7 @@ type physicalNode struct {
 }
 
 // NewPhysicalNode creates a new physical node using parameters received via MQTT registration.
-func NewPhysicalNode(nodeID uint32, commandTopic, statusTopic string, lat, long float64, bus *eventBus.EventBus, mqttClient mqtt.Client) mesh.INode {
+func NewPhysicalNode(nodeID uint32, commandTopic, processTopic, sendTopic string, lat, long float64, bus *eventBus.EventBus, mqttClient mqtt.Client) mesh.INode {
 	// Try to parse the incoming nodeID; if invalid, generate a new one
 	// TODO: hardware id's and simulation ids are incompatible currently need to update the simulation
 	log.Printf("[sim] Created new physical node ID: %d, x: %f, y: %f", nodeID, lat, long) //TODO: is this correct
@@ -61,7 +62,8 @@ func NewPhysicalNode(nodeID uint32, commandTopic, statusTopic string, lat, long 
 		messages:       make(chan []byte, 20),
 		quit:           make(chan struct{}),
 		commandTopic:   commandTopic,
-		statusTopic:    statusTopic,
+		processTopic:   processTopic,
+		sendTopic:      sendTopic,
 		neighbors:      make(map[uint32]bool),
 		seenBroadcasts: make(map[string]bool),
 		eventBus:       bus,
@@ -102,9 +104,31 @@ func (p *physicalNode) Run(net mesh.INetwork) {
 
 // SendData sends data to a specified destination using the node’s router.
 func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string) {
-	p.router.SendDataCSMA(net, p, destID, payload)
+	// p.router.SendDataCSMA(net, p, destID, payload)
 
-	// also need to send a message to the physical node to send a messge
+	// also need to send a message to the physical node to send a messge using lora
+	cmd := struct {
+		Destination uint32 `json:"destination"`
+		Message     string `json:"message"`
+	}{
+		Destination: destID,
+		Message:     payload,
+	}
+
+	buf, err := json.Marshal(cmd)
+	if err != nil {
+		log.Printf("Physical Node %d: failed to marshal send_message JSON: %v", p.id, err)
+		return
+	}
+	token := p.mqttManager.Publish(p.sendTopic, 0, false, buf)
+	token.Wait()
+	if token.Error() != nil {
+		log.Printf("Physical Node %d: error publishing send_message: %v", p.id, token.Error())
+	} else {
+		log.Printf("Physical Node %d: published send_message JSON to %s: %s",
+			p.id, p.sendTopic, buf)
+	}
+
 }
 
 // SendBroadcastInfo sends a HELLO broadcast from this physical node.
@@ -121,11 +145,11 @@ func (p *physicalNode) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	// payloadString := string(receivedPacket)
 	// fmt.Printf("Payload: %v\n", payloadString)
 
-	log.Printf("Physical Node: %d, sent message over mqtt topic %s", p.id, p.statusTopic)
+	log.Printf("Physical Node: %d, sent message over mqtt topic %s", p.id, p.processTopic)
 
 	// send the message over mqtt to the physical node
 
-	err := p.mqttManager.Publish(p.statusTopic, 0, false, receivedPacket)
+	err := p.mqttManager.Publish(p.processTopic, 0, false, receivedPacket)
 	if err != nil {
 		log.Printf("Physical Node %d: error publishing: %v", p.id, err)
 	}
@@ -176,7 +200,8 @@ func (p *physicalNode) PrintNodeDetails() {
 	fmt.Printf("  ID:          %d\n", p.id)
 	fmt.Printf("  Coordinates: (Lat: %.2f, Long: %.2f)\n", p.coordinates.Lat, p.coordinates.Long)
 	fmt.Printf("  Command Topic: %s\n", p.commandTopic)
-	fmt.Printf("  Status Topic:  %s\n", p.statusTopic)
+	fmt.Printf("  Process Topic:  %s\n", p.processTopic)
+	fmt.Printf("  Send Topic:  %s\n", p.sendTopic)
 	fmt.Printf("  Messages:    %d messages in queue\n", len(p.messages))
 	fmt.Printf("  Quit Signal: %v\n", p.quit != nil)
 	fmt.Println("  Seen Broadcasts:")

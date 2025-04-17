@@ -301,7 +301,7 @@ func CreateRREQPacket(srcID, destID, orginNode uint32, numHops uint8, packetID .
 	return packetBuffer, pid, nil
 }
 
-func CreateRREPPacket(srcID, destID, nextHopID, orginNode uint32, lifetime uint16, numHops uint8, packetID ...uint32) ([]byte, uint32, error) {
+func CreateRREPPacket(srcID, destRouteID, nextHopID, orginNode uint32, lifetime uint16, numHops uint8, packetID ...uint32) ([]byte, uint32, error) {
 
 	var pid uint32
 	if len(packetID) > 0 {
@@ -321,8 +321,8 @@ func CreateRREPPacket(srcID, destID, nextHopID, orginNode uint32, lifetime uint1
 	}
 
 	rrep := RREPHeader{
-		OriginNodeID:   orginNode,
-		RREPDestNodeID: destID,
+		OriginNodeID:   orginNode, // node that wanted the route
+		RREPDestNodeID: destRouteID, // destination of the route
 		Lifetime:       lifetime,
 		NumHops:        numHops,
 	}

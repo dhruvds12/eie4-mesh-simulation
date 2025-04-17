@@ -352,7 +352,6 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, rec
 	}
 }
 
-
 func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID uint32) {
 	rreqPacket, packetID, err := packet.CreateRREQPacket(r.ownerID, destID, r.ownerID, 0)
 	if err != nil {
@@ -381,13 +380,13 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	// if I'm the destination, send RREP
 	if r.ownerID == rh.RREQDestNodeID {
 		log.Printf("[sim] Node %d: RREQ arrived at destination.\n", r.ownerID)
-		r.sendRREP(net, node, rh.OriginNodeID, r.ownerID, 0) // Should this reset to 0 (yes)
+		r.sendRREP(net, node, rh.RREQDestNodeID, rh.OriginNodeID, 0) // Should this reset to 0 (yes)
 		return
 	}
 
 	// If we have a route to the destination, we can send RREP
 	if route, ok := r.routeTable[rh.RREQDestNodeID]; ok {
-		r.sendRREP(net, node, rh.OriginNodeID, rh.RREQDestNodeID, route.HopCount)
+		r.sendRREP(net, node, rh.RREQDestNodeID, rh.OriginNodeID, route.HopCount)
 		return
 	}
 
@@ -403,9 +402,9 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 // ONLY use to initate rrep
 func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, destRREP, sourceRREP uint32, hopCount int) {
 	// find route to 'source' in reverse direction
-	reverseRoute := r.routeTable[destRREP]
+	reverseRoute := r.routeTable[sourceRREP]
 	if reverseRoute == nil {
-		log.Printf("Node %d: can't send RREP, no route to %d.\n", r.ownerID, destRREP)
+		log.Printf("Node %d: can't send RREP, no route to %d.\n", r.ownerID, sourceRREP)
 		return
 	}
 	rrepPacket, packetID, err := packet.CreateRREPPacket(r.ownerID, destRREP, reverseRoute.NextHop, sourceRREP, 0, 0)
