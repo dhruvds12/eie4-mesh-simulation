@@ -8,13 +8,25 @@ import (
 
 // Packet Types
 const (
-	PKT_BROADCAST_INFO uint8 = 0x00
-	PKT_BROADCAST      uint8 = 0x01
-	PKT_RREQ           uint8 = 0x02
-	PKT_RREP           uint8 = 0x03
-	PKT_RERR           uint8 = 0x04
-	PKT_ACK            uint8 = 0x05
-	PKT_DATA           uint8 = 0x06
+	PKT_RREQ           uint8 = 0x01
+	PKT_RREP           uint8 = 0x02
+	PKT_RERR           uint8 = 0x03
+	PKT_DATA           uint8 = 0x04
+	PKT_BROADCAST      uint8 = 0x05
+	PKT_BROADCAST_INFO uint8 = 0x06
+	PKT_ACK            uint8 = 0x07
+
+	PKT_HELLO_SUMMARY    uint8 = 0x10
+	PKT_GET_DIFF         uint8 = 0x11
+	PKT_DIFF_REPLY       uint8 = 0x12
+	PKT_MOVE_UPDATE      uint8 = 0x13
+	PKT_LOC_REQ          uint8 = 0x14
+	PKT_LOC_REP          uint8 = 0x15
+	PKT_STATE_SYNC_REQ   uint8 = 0x16
+	PKT_STATE_SYNC_CHUNK uint8 = 0x17
+	PKT_NODE_ADVERT      uint8 = 0x18
+	PKT_USER_SUMMARY     uint8 = 0x19
+	PKT_USER_MOVED       uint8 = 0x1A // Not sure if this will make the cut
 )
 
 const MaxPacketSize = 255
@@ -321,7 +333,7 @@ func CreateRREPPacket(srcID, destRouteID, nextHopID, orginNode uint32, lifetime 
 	}
 
 	rrep := RREPHeader{
-		OriginNodeID:   orginNode, // node that wanted the route
+		OriginNodeID:   orginNode,   // node that wanted the route
 		RREPDestNodeID: destRouteID, // destination of the route
 		Lifetime:       lifetime,
 		NumHops:        numHops,
