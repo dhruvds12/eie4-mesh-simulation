@@ -216,3 +216,7 @@ func (n *nodeImpl) GetRouter() routing.IRouter {
 func (n *nodeImpl) SetRouter(r routing.IRouter) {
 	n.router = r
 }
+
+func (n *nodeImpl) IsVirtual() bool {
+	return true;
+}

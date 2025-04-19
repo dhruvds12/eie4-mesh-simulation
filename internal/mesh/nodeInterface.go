@@ -12,4 +12,6 @@ type INode interface {
 
 	GetPosition() Coordinates
 	SetPosition(coord Coordinates)
+
+	IsVirtual() bool
 }

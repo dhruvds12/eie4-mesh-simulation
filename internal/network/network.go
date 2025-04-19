@@ -197,6 +197,10 @@ func (net *networkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packe
 		if id == sender.GetID() {
 			continue
 		}
+
+		if !sender.IsVirtual() && !nd.IsVirtual() {
+			continue
+		}
 		if net.IsInRange(sender, nd) {
 			recipients = append(recipients, nd)
 			log.Printf("[Network] Node %d pre-filtered as recipient for msg %d.\n", id, packetID)

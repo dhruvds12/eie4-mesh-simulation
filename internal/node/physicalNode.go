@@ -193,6 +193,10 @@ func (p *physicalNode) SetPosition(coord mesh.Coordinates) {
 	p.coordinates = coord
 }
 
+func (p *physicalNode) IsVirtual() bool {
+	return false;
+}
+
 // PrintNodeDetails prints details specific to this physical node.
 func (p *physicalNode) PrintNodeDetails() {
 	fmt.Println("====================================")
