@@ -14,4 +14,7 @@ type INode interface {
 	SetPosition(coord Coordinates)
 
 	IsVirtual() bool
+
+	GetConnectedUsers() []uint32
+	HasConnectedUser(userID uint32) bool
 }

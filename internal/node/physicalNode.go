@@ -49,6 +49,8 @@ type physicalNode struct {
 	seenBroadcasts map[string]bool
 	eventBus       *eventBus.EventBus
 	net            mesh.INetwork
+	muUsers        sync.RWMutex
+	connectedUsers map[uint32]bool
 }
 
 // NewPhysicalNode creates a new physical node using parameters received via MQTT registration.
@@ -69,6 +71,7 @@ func NewPhysicalNode(nodeID uint32, commandTopic, processTopic, sendTopic string
 		eventBus:       bus,
 		router:         routing.NewAODVRouter(nodeID, bus),
 		mqttManager:    mqttClient,
+		connectedUsers: make(map[uint32]bool),
 	}
 }
 
@@ -281,4 +284,35 @@ func (p *physicalNode) handleMQTTCommand(client mqtt.Client, msg mqtt.Message) {
 	default:
 		log.Printf("Physical Node %d: unknown command action: %d", p.id, cmd.Action)
 	}
+}
+
+func (p *physicalNode) AddConnectedUser(userID uint32) {
+	p.muUsers.Lock()
+	defer p.muUsers.Unlock()
+	p.connectedUsers[userID] = true
+}
+
+// RemoveConnectedUser unregisters a BLE‑disconnected user.
+func (p *physicalNode) RemoveConnectedUser(userID uint32) {
+	p.muUsers.Lock()
+	defer p.muUsers.Unlock()
+	delete(p.connectedUsers, userID)
+}
+
+// GetConnectedUsers returns a snapshot of all currently connected userIDs.
+func (p *physicalNode) GetConnectedUsers() []uint32 {
+	p.muUsers.RLock()
+	defer p.muUsers.RUnlock()
+	list := make([]uint32, 0, len(p.connectedUsers))
+	for uid := range p.connectedUsers {
+		list = append(list, uid)
+	}
+	return list
+}
+
+// HasConnectedUser lets you test membership
+func (p *physicalNode) HasConnectedUser(userID uint32) bool {
+	p.muUsers.RLock()
+	defer p.muUsers.RUnlock()
+	return p.connectedUsers[userID]
 }

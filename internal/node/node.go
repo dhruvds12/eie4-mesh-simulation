@@ -25,6 +25,9 @@ type nodeImpl struct {
 	neighbors      map[uint32]bool
 	seenBroadcasts map[string]bool
 
+	muUsers        sync.RWMutex
+	connectedUsers map[uint32]bool
+
 	eventBus *eventBus.EventBus
 }
 
@@ -42,6 +45,7 @@ func NewNode(lat, long float64, bus *eventBus.EventBus) mesh.INode {
 		neighbors:      make(map[uint32]bool),
 		router:         routing.NewAODVRouter(nodeIdInt, bus),
 		eventBus:       bus,
+		connectedUsers: make(map[uint32]bool),
 	}
 }
 
@@ -218,5 +222,36 @@ func (n *nodeImpl) SetRouter(r routing.IRouter) {
 }
 
 func (n *nodeImpl) IsVirtual() bool {
-	return true;
+	return true
+}
+
+func (n *nodeImpl) AddConnectedUser(userID uint32) {
+	n.muUsers.Lock()
+	defer n.muUsers.Unlock()
+	n.connectedUsers[userID] = true
+}
+
+// RemoveConnectedUser unregisters a BLE‑disconnected user.
+func (n *nodeImpl) RemoveConnectedUser(userID uint32) {
+	n.muUsers.Lock()
+	defer n.muUsers.Unlock()
+	delete(n.connectedUsers, userID)
+}
+
+// GetConnectedUsers returns a snapshot of all currently connected userIDs.
+func (n *nodeImpl) GetConnectedUsers() []uint32 {
+	n.muUsers.RLock()
+	defer n.muUsers.RUnlock()
+	list := make([]uint32, 0, len(n.connectedUsers))
+	for uid := range n.connectedUsers {
+		list = append(list, uid)
+	}
+	return list
+}
+
+// HasConnectedUser lets you test membership
+func (n *nodeImpl) HasConnectedUser(userID uint32) bool {
+	n.muUsers.RLock()
+	defer n.muUsers.RUnlock()
+	return n.connectedUsers[userID]
 }
