@@ -17,4 +17,7 @@ type INode interface {
 
 	GetConnectedUsers() []uint32
 	HasConnectedUser(userID uint32) bool
+
+	AddConnectedUser(userID uint32)
+	RemoveConnectedUser(userID uint32)
 }

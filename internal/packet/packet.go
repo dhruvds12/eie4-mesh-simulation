@@ -18,6 +18,7 @@ const (
 	PKT_UREQ           uint8 = 0x0F // user lookup request
 	PKT_UREP           uint8 = 0x10 // user lookup reply
 	PKT_URERR          uint8 = 0x11 // user lookup error
+	PKT_USER_MSG       uint8 = 0x12 // user lookup error
 )
 
 const MaxPacketSize = 255
@@ -94,6 +95,12 @@ type USERDATAHeader struct {
 	SenderID   uint32 // sender of the message
 	ReceiverID uint32 // receiver of the message
 	DestNodeID uint32 // final destination of message (ie node where the target user is)
+}
+
+type USERMessageHeader struct {
+	SenderUserID uint32
+	DestUserID   uint32
+	DestNodeID   uint32
 }
 
 func (bh *BaseHeader) SerialiseBaseHeader() ([]byte, error) {
@@ -802,4 +809,116 @@ func DeserialiseUERRPacket(buf []byte) (BaseHeader, UERRHeader, error) {
 		OriginNode: binary.LittleEndian.Uint32(buf[ofs+8 : ofs+12]),
 	}
 	return bh, h, nil
+}
+
+// SerialiseUSERMessageHeader writes the USERMessageHeader into a 12-byte slice
+func (h *USERMessageHeader) SerialiseUSERMessageHeader() ([]byte, error) {
+	buf := make([]byte, 12)
+	binary.LittleEndian.PutUint32(buf[0:4], h.SenderUserID)
+	binary.LittleEndian.PutUint32(buf[4:8], h.DestUserID)
+	binary.LittleEndian.PutUint32(buf[8:12], h.DestNodeID)
+	return buf, nil
+}
+
+// DeserialiseUSERMessageHeader parses a 12-byte slice into USERMessageHeader
+func (h *USERMessageHeader) DeserialiseUSERMessageHeader(buf []byte) error {
+	if len(buf) < 12 {
+		return fmt.Errorf("buffer too short for USERMessageHeader: need 12, got %d", len(buf))
+	}
+	h.SenderUserID = binary.LittleEndian.Uint32(buf[0:4])
+	h.DestUserID   = binary.LittleEndian.Uint32(buf[4:8])
+	h.DestNodeID   = binary.LittleEndian.Uint32(buf[8:12])
+	return nil
+}
+
+// CreateUSERMessagePacket builds a full packet containing BaseHeader + USERMessageHeader + payload
+func CreateUSERMessagePacket(
+	srcID, senderUserID, destUserID, destNodeID, nextHopID uint32,
+	hopCount uint8,
+	payload []byte,
+	packetID ...uint32,
+) ([]byte, uint32, error) {
+	// pick or generate a packet ID
+	var pid uint32
+	if len(packetID) > 0 {
+		pid = packetID[0]
+	} else {
+		pid = createPacketID()
+	}
+
+	// construct BaseHeader (dest = nextHop)
+	bh := BaseHeader{
+		DestNodeID: nextHopID,
+		SrcNodeID:  srcID,
+		PacketID:   pid,
+		PacketType: PKT_USER_MSG,
+		Flags:      0x0,
+		HopCount:   hopCount,
+		Reserved:   0x0,
+	}
+
+	// construct USERMessageHeader
+	mh := USERMessageHeader{
+		SenderUserID: senderUserID,
+		DestUserID:   destUserID,
+		DestNodeID:   destNodeID,
+	}
+
+	// serialize headers
+	bhBytes, err := bh.SerialiseBaseHeader()
+	if err != nil {
+		return nil, 0, fmt.Errorf("error serialising BaseHeader: %w", err)
+	}
+	mhBytes, err := mh.SerialiseUSERMessageHeader()
+	if err != nil {
+		return nil, 0, fmt.Errorf("error serialising USERMessageHeader: %w", err)
+	}
+
+	// determine packet length, truncating payload if needed
+	total := len(bhBytes) + len(mhBytes) + len(payload)
+	if total > MaxPacketSize {
+		allowed := MaxPacketSize - (len(bhBytes) + len(mhBytes))
+		payload = payload[:allowed]
+		total = MaxPacketSize
+	}
+
+	// assemble packet
+	buf := make([]byte, total)
+	ofs := 0
+	copy(buf[ofs:], bhBytes)
+	ofs += len(bhBytes)
+	copy(buf[ofs:], mhBytes)
+	ofs += len(mhBytes)
+	copy(buf[ofs:], payload)
+
+	return buf, pid, nil
+}
+
+// DeserialiseUSERMessagePacket splits a buffer into BaseHeader, USERMessageHeader, and payload
+func DeserialiseUSERMessagePacket(
+	buf []byte,
+) (BaseHeader, USERMessageHeader, []byte, error) {
+	var bh BaseHeader
+	var mh USERMessageHeader
+
+	// BaseHeader is 16 bytes
+	if len(buf) < 16 {
+		return bh, mh, nil, fmt.Errorf("buffer too short for BaseHeader: need 16, got %d", len(buf))
+	}
+	if err := bh.DeserialiseBaseHeader(buf[0:16]); err != nil {
+		return bh, mh, nil, err
+	}
+
+	// USERMessageHeader is next 12 bytes
+	ofs := 16
+	if len(buf) < ofs+12 {
+		return bh, mh, nil, fmt.Errorf("buffer too short for USERMessageHeader: need %d, got %d", ofs+12, len(buf))
+	}
+	if err := mh.DeserialiseUSERMessageHeader(buf[ofs : ofs+12]); err != nil {
+		return bh, mh, nil, err
+	}
+
+	// remainder is payload
+	payload := buf[ofs+12:]
+	return bh, mh, payload, nil
 }
