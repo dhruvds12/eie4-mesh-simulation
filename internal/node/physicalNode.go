@@ -134,6 +134,11 @@ func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string
 
 }
 
+// send user message
+func (p *physicalNode) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string) {
+	p.router.SendUserMessage(net, p, userID, destUserID, payload)
+}
+
 // SendBroadcastInfo sends a HELLO broadcast from this physical node.
 func (p *physicalNode) SendBroadcastInfo(net mesh.INetwork) {
 	p.router.SendBroadcastInfo(net, p)
@@ -197,7 +202,7 @@ func (p *physicalNode) SetPosition(coord mesh.Coordinates) {
 }
 
 func (p *physicalNode) IsVirtual() bool {
-	return false;
+	return false
 }
 
 // PrintNodeDetails prints details specific to this physical node.

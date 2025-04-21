@@ -35,4 +35,5 @@ type IRouter interface {
 	RemoveRouteEntry(dest uint32)
 
 	BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, sendPacket []byte, packetID uint32)
+	SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string)
 }

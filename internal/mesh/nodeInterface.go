@@ -20,4 +20,6 @@ type INode interface {
 
 	AddConnectedUser(userID uint32)
 	RemoveConnectedUser(userID uint32)
+
+	SendUserMessage(net INetwork, userID, destUserID uint32, payload string)
 }

@@ -48,13 +48,18 @@ type DataQueueEntry struct {
 	destUserID uint32
 }
 
+type userMessageQueueEntry struct {
+	senderID uint32
+	payload  string
+}
+
 // AODVRouter is a per-node router
 type AODVRouter struct {
 	ownerID          uint32
-	routeTable       map[uint32]*RouteEntry      // key = destination ID
-	seenMsgIDs       map[uint32]bool             // deduplicate RREQ/RREP
-	dataQueue        map[uint32][]DataQueueEntry // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
-	userMessageQueue map[uint32][]string         // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
+	routeTable       map[uint32]*RouteEntry             // key = destination ID
+	seenMsgIDs       map[uint32]bool                    // deduplicate RREQ/RREP
+	dataQueue        map[uint32][]DataQueueEntry        // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
+	userMessageQueue map[uint32][]userMessageQueueEntry // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
 	queueMu          sync.RWMutex
 	pendingTxs       map[uint32]PendingTx
 	quitChan         chan struct{}
@@ -74,7 +79,7 @@ func NewAODVRouter(ownerID uint32, bus *eventBus.EventBus) *AODVRouter {
 		quitChan:         make(chan struct{}),
 		eventBus:         bus,
 		gut:              make(map[uint32]UserEntry), // global user table -> has the location of a user in the mesh network
-		userMessageQueue: make(map[uint32][]string),
+		userMessageQueue: make(map[uint32][]userMessageQueueEntry),
 	}
 }
 
@@ -186,7 +191,7 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 	userEntry, ok := r.hasUserEntry(destUserID)
 	if !ok {
 		// save the message
-		r.saveUsermessage(destUserID, payload)
+		r.saveUsermessage(sendUserID, destUserID, payload)
 		r.initiateUREQ(net, sender, destUserID)
 		return
 	}
@@ -522,7 +527,8 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 	r.seenMsgIDs[bh.PacketID] = true
 
 	// Add forward route to ctrl.Source
-	r.maybeAddRoute(rreph.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+	r.maybeAddRoute(rreph.RREPDestNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+	r.maybeAddRoute(bh.SrcNodeID, bh.SrcNodeID, 1)
 
 	// if I'm the original route requester, done
 	if r.ownerID == rreph.RREPDestNodeID {
@@ -722,17 +728,23 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 
 	payloadString := string(payload)
 	if umh.DestNodeID == r.ownerID {
-		log.Printf("[sim] Node %d: USER MESSAGE arrived for user %d from %d. Payload = %q\n", r.ownerID, umh.DestUserID, umh.SenderUserID, payload)
-		// Send an ACK back to the sender
-		r.eventBus.Publish(eventBus.Event{
-			Type:        eventBus.EventMessageDelivered, //TODO change to another type to represent a user message
-			NodeID:      r.ownerID,
-			Payload:     payloadString,
-			OtherNodeID: bh.SrcNodeID,
-			Timestamp:   time.Now(),
-		})
-		// TODO: this is a simplification as this should depend on the packet header -> should not always be sending an ack
-		r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
+		// check that the user is at this node
+		_, ok := r.hasUserEntry(umh.DestUserID)
+		if ok {
+			log.Printf("[sim] Node %d: USER MESSAGE arrived for user %d from %d. Payload = %q\n", r.ownerID, umh.DestUserID, umh.SenderUserID, payload)
+			// Send an ACK back to the sender
+			r.eventBus.Publish(eventBus.Event{
+				Type:        eventBus.EventMessageDelivered, //TODO change to another type to represent a user message
+				NodeID:      r.ownerID,
+				Payload:     payloadString,
+				OtherNodeID: bh.SrcNodeID,
+				Timestamp:   time.Now(),
+			})
+			// TODO: this is a simplification as this should depend on the packet header -> should not always be sending an ack
+			r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
+			return
+		}
+		r.initiateUERR(net, node, bh.SrcNodeID, umh.DestUserID)
 		return
 	}
 
@@ -748,7 +760,7 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
-	userMessagePacket, packetID, err := packet.CreateUSERMessagePacket(r.ownerID, umh.SenderUserID, umh.DestUserID, umh.DestNodeID, route.NextHop, bh.HopCount+1, payload, bh.PacketID)
+	userMessagePacket, packetID, err := packet.CreateUSERMessagePacket(bh.SrcNodeID, umh.SenderUserID, umh.DestUserID, umh.DestNodeID, route.NextHop, bh.HopCount+1, payload, bh.PacketID)
 	if err != nil {
 		return
 	}
@@ -826,17 +838,26 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 	r.seenMsgIDs[bh.PacketID] = true
 
+	// add routes
+
+	r.maybeAddRoute(bh.SrcNodeID, bh.SrcNodeID, 1)
+	r.maybeAddRoute(uh.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+
 	if node.HasConnectedUser(uh.UREQUserID) {
 		// user connected to me return UREQ
+		log.Printf("[sim] [UREQ] Node %d: has user connected%d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount)
 		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, r.ownerID, uh.UREQUserID, 0, 0)
 		r.BroadcastMessageCSMA(net, node, reply, pid)
+		return
 	}
 
 	// If I have a path to user reply
 	if n, ok := r.hasUserEntry(uh.UREQUserID); ok {
 		// reply with UREP along reverse path
+		log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount)
 		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, 0)
 		r.BroadcastMessageCSMA(net, node, reply, pid)
+		return
 	}
 
 	// Otherwise forward the rreq
@@ -869,6 +890,12 @@ func (r *AODVRouter) handleUREP(net mesh.INetwork, node mesh.INode, receivedPack
 		r.maybeAddRoute(uh.UREPDestNodeID, bh.SrcNodeID, int(bh.HopCount))
 
 		// do some thing like send the messages that were queued
+
+		msgs := r.getUserMessages(uh.UREPUserID)
+		for _, umqe := range msgs {
+			r.SendUserMessage(net, node, umqe.senderID, uh.UREPUserID, umqe.payload)
+		}
+		return
 
 	}
 
@@ -903,6 +930,7 @@ func (r *AODVRouter) handleUERR(net mesh.INetwork, node mesh.INode, receivedPack
 
 	if r.ownerID == uh.OriginNode {
 		r.removeUserEntry(uh.UERRUserID, uh.UERRNodeID)
+		return
 	}
 
 	// else forward the message to destination
@@ -1046,13 +1074,25 @@ func (r *AODVRouter) removeUserEntry(userId uint32, nodeId uint32) bool {
 	return false
 }
 
-func (r *AODVRouter) saveUsermessage(userId uint32, payload string) {
+func (r *AODVRouter) saveUsermessage(senderUserID, destUserId uint32, payload string) {
 	r.queueMu.Lock()
 	defer r.queueMu.Unlock()
 
-	r.userMessageQueue[userId] = append(r.userMessageQueue[userId], payload)
+	umqe := userMessageQueueEntry{
+		senderID: senderUserID,
+		payload:  payload,
+	}
+
+	r.userMessageQueue[destUserId] = append(r.userMessageQueue[destUserId], umqe)
 }
 
-func (r *AODVRouter) getUserMessages(userId uint32) {
+// getUserMessages returns all buffered messages for userId and clears them out.
+func (r *AODVRouter) getUserMessages(userId uint32) []userMessageQueueEntry {
+	r.queueMu.Lock()
+	defer r.queueMu.Unlock()
 
+	msgs := r.userMessageQueue[userId]
+	// clear the queue
+	delete(r.userMessageQueue, userId)
+	return msgs
 }

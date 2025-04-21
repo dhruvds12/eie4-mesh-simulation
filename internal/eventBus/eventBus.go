@@ -16,6 +16,9 @@ const (
 	EventAddRouteEntry    EventType = "ADD_ROUTE_ENTRY"
 	EventMovedNode        EventType = "MOVED_NODE"
 	EventRemoveRouteEntry EventType = "REMOVED_ROUTE_ENTRY"
+	EventCreateUser       EventType = "CREATE_USER"
+	EventDeleteUser       EventType = "DELETE_USER"
+	EventUserMessage      EventType = "USER_MESSAGE"
 )
 
 // RouteEntry represents an entry in the routing table.
@@ -37,6 +40,8 @@ type Event struct {
 	X                 float64    `json:"x"`
 	Y                 float64    `json:"y"`
 	Virtual           bool       `json:"virtual"`
+	UserID            uint32     `json:"user_id"` // also the send user
+	DestUserID        uint32     `json:"dest_user_id"`
 }
 
 // EventBus manages a set of subscribers and publishes events to them.

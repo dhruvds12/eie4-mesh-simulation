@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -148,6 +149,167 @@ func MoveNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc
 			X:         node.GetPosition().Lat,
 			Y:         node.GetPosition().Long,
 		})
+
+	}
+}
+
+type CreateUserPayload struct {
+	NodeID uint32 `json:"node_id"`
+}
+
+// Create User
+func CreateUser(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload CreateUserPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		nodeID := payload.NodeID
+
+		node, err := net.GetNode(nodeID)
+		if err != nil {
+			http.Error(w, "node_id not found", http.StatusBadRequest)
+			return
+		}
+
+		w.Write([]byte("Creating user...."))
+		userID := uint32(rand.Int31())
+		node.AddConnectedUser(userID)
+
+		bus.Publish((eventBus.Event{
+			Type:    eventBus.EventCreateUser,
+			NodeID:  nodeID,
+			UserID:  userID,
+			Payload: fmt.Sprintf("Created user %d at %d", userID, nodeID),
+		}))
+
+	}
+}
+
+type DeleteUserPayload struct {
+	NodeID uint32 `json:"node_id"`
+	UserID uint32 `json:"user_id"`
+}
+
+func DeleteUser(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload DeleteUserPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		nodeID := payload.NodeID
+
+		node, err := net.GetNode(nodeID)
+		if err != nil {
+			http.Error(w, "node_id not found", http.StatusBadRequest)
+			return
+		}
+
+		w.Write([]byte("Deleting user...."))
+		node.RemoveConnectedUser(payload.UserID)
+
+		bus.Publish((eventBus.Event{
+			Type:    eventBus.EventDeleteUser,
+			NodeID:  nodeID,
+			UserID:  payload.UserID,
+			Payload: fmt.Sprintf("Deleting user %d at %d", payload.UserID, nodeID),
+		}))
+
+	}
+}
+
+type SendUserMessagePayload struct {
+	NodeID     uint32 `json:"node_id"`
+	UserID     uint32 `json:"user_id"`
+	DestUserID uint32 `json:"dest_user_id"`
+	Message    string `json:"message"`
+}
+
+func SendUserMessage(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload SendUserMessagePayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		nodeID := payload.NodeID
+
+		node, err := net.GetNode(nodeID)
+		if err != nil {
+			http.Error(w, "node_id not found", http.StatusBadRequest)
+			return
+		}
+
+		w.Write([]byte("Sending user message...."))
+		node.SendUserMessage(net, payload.UserID, payload.DestUserID, payload.Message)
+
+		// bus.Publish((eventBus.Event{
+		// 	Type:       eventBus.EventUserMessage,
+		// 	NodeID:     nodeID,
+		// 	UserID:     payload.UserID,
+		// 	DestUserID: payload.DestUserID,
+		// 	Payload:    payload.Message,
+		// }))
+
+	}
+}
+
+type MoveUserPayload struct {
+	NodeID      uint32 `json:"node_id"`
+	UserID      uint32 `json:"user_id"`
+	OtherNodeID uint32 `json:"other_node_id"`
+}
+
+func MoveUser(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload MoveUserPayload
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		nodeID := payload.NodeID
+
+		node, err := net.GetNode(nodeID)
+		if err != nil {
+			http.Error(w, "node_id not found", http.StatusBadRequest)
+			return
+		}
+
+		otherNode, err := net.GetNode(payload.OtherNodeID)
+		if err != nil {
+			http.Error(w, "node_id not found", http.StatusBadRequest)
+			return
+		}
+
+		node.RemoveConnectedUser(payload.UserID)
+
+		otherNode.AddConnectedUser(payload.UserID)
+
+		w.Write([]byte("Sending user message...."))
+
+		// bus.Publish((eventBus.Event{
+		// 	Type:       eventBus.EventUserMessage,
+		// 	NodeID:     nodeID,
+		// 	UserID:     payload.UserID,
+		// 	DestUserID: payload.DestUserID,
+		// 	Payload:    payload.Message,
+		// }))
+
+		bus.Publish((eventBus.Event{
+			Type:    eventBus.EventDeleteUser,
+			NodeID:  nodeID,
+			UserID:  payload.UserID,
+			Payload: fmt.Sprintf("Deleting user %d at %d", payload.UserID, nodeID),
+		}))
+
+		bus.Publish((eventBus.Event{
+			Type:    eventBus.EventCreateUser,
+			NodeID:  payload.OtherNodeID,
+			UserID:  payload.UserID,
+			Payload: fmt.Sprintf("Created user %d at %d", payload.UserID, payload.OtherNodeID),
+		}))
 
 	}
 }

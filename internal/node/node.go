@@ -93,6 +93,11 @@ func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
 	n.router.SendDataCSMA(net, n, destID, payload)
 }
 
+// send user message
+func (n *nodeImpl) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string) {
+	n.router.SendUserMessage(net, n, userID, destUserID, payload)
+}
+
 // BroadcastHello sends a HELLO broadcast announcing the node’s presence.
 func (n *nodeImpl) SendBroadcastInfo(net mesh.INetwork) {
 	// // Create a unique broadcast ID to deduplicate
@@ -131,7 +136,7 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	// 	n.neighbors[bh.SrcNodeID] = true
 	// 	n.router.AddDirectNeighbor(n.id, bh.SrcNodeID)
 	// 	n.muNeighbors.Unlock()
-	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO, packet.PKT_BROADCAST:
+	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO, packet.PKT_BROADCAST, packet.PKT_UREP, packet.PKT_UREQ, packet.PKT_URERR, packet.PKT_USER_MSG:
 		n.router.HandleMessage(net, n, receivedPacket)
 	default:
 		log.Printf("Node %d: unknown message type from %d\n", n.id, bh.SrcNodeID)

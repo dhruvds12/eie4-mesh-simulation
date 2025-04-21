@@ -86,6 +86,10 @@ func StartServer(eb *eventBus.EventBus, net mesh.INetwork) {
 	http.HandleFunc("/nodeAPI/remove", commands.RemoveNodeHandler(net, eb))
 	http.HandleFunc("/nodeAPI/sendMessage", commands.SendMessageHandler(net, eb))
 	http.HandleFunc("/nodeAPI/move", commands.MoveNodeHandler(net, eb))
+	http.HandleFunc("/userAPI/create", commands.CreateUser(net, eb))
+	http.HandleFunc("/userAPI/delete", commands.DeleteUser(net, eb))
+	http.HandleFunc("/userAPI/sendMessage", commands.SendUserMessage(net, eb))
+	http.HandleFunc("/userAPI/moveUser", commands.MoveUser(net, eb))
 
 	// Start the HTTP server (e.g. on port 8080).
 	log.Println("Server started on :8080")
