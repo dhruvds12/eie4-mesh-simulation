@@ -17,7 +17,7 @@ const (
 	PKT_ACK            uint8 = 0x07
 	PKT_UREQ           uint8 = 0x0F // user lookup request
 	PKT_UREP           uint8 = 0x10 // user lookup reply
-	PKT_URERR          uint8 = 0x11 // user lookup error
+	PKT_UERR          uint8 = 0x11 // user lookup error
 	PKT_USER_MSG       uint8 = 0x12 // user lookup error
 )
 
@@ -772,7 +772,7 @@ func DeserialiseUREPPacket(buf []byte) (BaseHeader, UREPHeader, error) {
 	return bh, h, nil
 }
 
-// CreateURERRPacket constructs a URERR (user lookup error) packet.
+// CreateUERRPacket constructs a UERR (user lookup error) packet.
 // Now includes UERRUserID, UERRNodeID, OriginNode, and OriginalPacketID.
 func CreateUERRPacket(
 	srcID, destNodeID,
@@ -785,7 +785,7 @@ func CreateUERRPacket(
 		DestNodeID: destNodeID,
 		SrcNodeID:  srcID,
 		PacketID:   pid,
-		PacketType: PKT_URERR,
+		PacketType: PKT_UERR,
 		Flags:      0,
 		HopCount:   0,
 		Reserved:   0,
@@ -815,7 +815,7 @@ func CreateUERRPacket(
 	return buf, pid, nil
 }
 
-// DeserialiseURERRPacket unpacks a URERR packet into BaseHeader + UERRHeader.
+// DeserialiseUERRPacket unpacks a UERR packet into BaseHeader + UERRHeader.
 func DeserialiseUERRPacket(
 	buf []byte,
 ) (BaseHeader, UERRHeader, error) {

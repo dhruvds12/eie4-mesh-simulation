@@ -298,7 +298,7 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 		r.handleUREQ(net, node, receivedPacket)
 	case packet.PKT_UREP:
 		r.handleUREP(net, node, receivedPacket)
-	case packet.PKT_URERR:
+	case packet.PKT_UERR:
 		r.handleUERR(net, node, receivedPacket)
 	case packet.PKT_USER_MSG:
 		r.handleUserMessage(net, node, receivedPacket)

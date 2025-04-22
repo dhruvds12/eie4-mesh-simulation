@@ -136,7 +136,7 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	// 	n.neighbors[bh.SrcNodeID] = true
 	// 	n.router.AddDirectNeighbor(n.id, bh.SrcNodeID)
 	// 	n.muNeighbors.Unlock()
-	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO, packet.PKT_BROADCAST, packet.PKT_UREP, packet.PKT_UREQ, packet.PKT_URERR, packet.PKT_USER_MSG:
+	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO, packet.PKT_BROADCAST, packet.PKT_UREP, packet.PKT_UREQ, packet.PKT_UERR, packet.PKT_USER_MSG:
 		n.router.HandleMessage(net, n, receivedPacket)
 	default:
 		log.Printf("Node %d: unknown message type from %d\n", n.id, bh.SrcNodeID)
