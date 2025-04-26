@@ -1,13 +1,11 @@
 package message
 
-import "github.com/google/uuid"
-
 type IMessage interface {
 	GetType() MessageType
-	GetFrom() uuid.UUID
-	GetTo() uuid.UUID
+	GetFrom() uint32
+	GetTo() uint32
 	GetID() string
 	GetPayload() string
-	GetDest() uuid.UUID
-	GetOrigin() uuid.UUID
+	GetDest() uint32
+	GetOrigin() uint32
 }
