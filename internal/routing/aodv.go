@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"math/rand"
@@ -66,6 +67,7 @@ type AODVRouter struct {
 	eventBus         *eventBus.EventBus
 	gut              map[uint32]UserEntry
 	gutMu            sync.RWMutex
+	lastUsersShadow  map[uint32]bool
 }
 
 // NewAODVRouter constructs a router for a specific node
@@ -80,6 +82,7 @@ func NewAODVRouter(ownerID uint32, bus *eventBus.EventBus) *AODVRouter {
 		eventBus:         bus,
 		gut:              make(map[uint32]UserEntry), // global user table -> has the location of a user in the mesh network
 		userMessageQueue: make(map[uint32][]userMessageQueueEntry),
+		lastUsersShadow:  make(map[uint32]bool),
 	}
 }
 
@@ -128,6 +131,21 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 			}
 		}
 	}
+}
+
+func (r *AODVRouter) StartBroadcastTicker(net mesh.INetwork, node mesh.INode) {
+	go func() {
+		t := time.NewTicker(60 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-r.quitChan:
+				return
+			case <-t.C:
+				r.SendDiffBroadcastInfo(net, node)
+			}
+		}
+	}()
 }
 
 // Stop the pendingTxChecker
@@ -343,6 +361,34 @@ func (r *AODVRouter) SendBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 	r.BroadcastMessageCSMA(net, node, infoPacket, packetID)
 }
 
+func (r *AODVRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) {
+	cur := node.GetConnectedUsers()
+	now := make(map[uint32]bool, len(cur))
+	for _, u := range cur {
+		now[u] = true
+	}
+
+	var added, removed []uint32
+	for u := range now {
+		if !r.lastUsersShadow[u] {
+			added = append(added, u)
+		}
+	}
+	for u := range r.lastUsersShadow {
+		if !now[u] {
+			removed = append(removed, u)
+		}
+	}
+
+	pkt, pid, err := packet.CreateDiffBroadcastInfoPacket(
+		r.ownerID, r.ownerID, added, removed, 0,
+	)
+	if err == nil {
+		r.BroadcastMessageCSMA(net, node, pkt, pid)
+	}
+	r.lastUsersShadow = now
+}
+
 func (r *AODVRouter) AddRouteEntry(dest, nextHop uint32, hopCount int) {
 	re := RouteEntry{
 		Destination: dest,
@@ -402,51 +448,48 @@ func (r *AODVRouter) BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, 
 
 // -- Private AODV logic --
 // handleBroadcastInfo processes a HELLO broadcast message.
-func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, receivedPacket []byte) {
-	bh, ih, err := packet.DeserialiseInfoPacket(receivedPacket)
-	if err != nil {
-		log.Printf("Error in deserialisation of info packet: %q", err)
+func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, buf []byte) {
+	var bh packet.BaseHeader
+	if err := bh.DeserialiseBaseHeader(buf); err != nil {
 		return
 	}
+	ofs := 16
 
-	nodeID := node.GetID()
-	// Check for duplicate broadcasts
-	if r.seenMsgIDs[bh.PacketID] {
+	var dh packet.DiffBroadcastInfoHeader
+	if err := dh.Deserialise(buf[ofs:]); err != nil {
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	ofs += 8
 
-	neighborID := bh.SrcNodeID
-
-	log.Printf("[sim] Node %d: received BROADCAST INFO from %d, payload=NO PAYLOAD\n",
-		nodeID, neighborID)
-
-	// Add the sender to the list of neighbors
-	r.AddDirectNeighbor(nodeID, bh.SrcNodeID)
-
-	// add the originNode
-	if nodeID != ih.OriginNodeID {
-		r.AddRouteEntry(ih.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+	total := int(dh.NumAdded) + int(dh.NumRemoved)
+	if len(buf) < ofs+4*total {
+		return
+	}
+	ids := make([]uint32, total)
+	for i := 0; i < total; i++ {
+		ids[i] = binary.LittleEndian.Uint32(buf[ofs+i*4:])
 	}
 
-	// Need to add users attached to the broadcastInfo to the GUT
-	for _, userID := range ih.Users {
-		// update the GUT
-		r.addToGUT(userID, ih.OriginNodeID)
+	added := ids[:dh.NumAdded]
+	removed := ids[dh.NumAdded:]
+
+	r.AddDirectNeighbor(node.GetID(), bh.SrcNodeID)
+	if dh.OriginNodeID != r.ownerID {
+		r.maybeAddRoute(dh.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+	}
+	for _, u := range added {
+		r.addToGUT(u, dh.OriginNodeID)
+	}
+	for _, u := range removed {
+		r.removeUserEntry(u, dh.OriginNodeID)
 	}
 
-	// If I am not the original sender of this message add the route to origin and forward
-	if ih.OriginNodeID != r.ownerID {
-		r.maybeAddRoute(ih.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
-		if bh.HopCount < packet.MAX_HOPS {
-			sendPacket, packetID, err := packet.CreateBroadcastInfoPacket(nodeID, ih.OriginNodeID, ih.Users, bh.HopCount+1, bh.PacketID)
-			if err != nil {
-				log.Printf("Error in create broadcastInfoPacket: %q", err)
-			}
-
-			r.BroadcastMessageCSMA(net, node, sendPacket, packetID)
-			// No longer send ACK for broadcasts as this will flood the network also BroadcastInfo in hardware is periodic
-		}
+	if dh.OriginNodeID != r.ownerID && bh.HopCount < packet.MAX_HOPS {
+		fwd, pid, _ := packet.CreateDiffBroadcastInfoPacket(
+			r.ownerID, dh.OriginNodeID, added, removed,
+			bh.HopCount+1, bh.PacketID,
+		)
+		r.BroadcastMessageCSMA(net, node, fwd, pid)
 	}
 }
 

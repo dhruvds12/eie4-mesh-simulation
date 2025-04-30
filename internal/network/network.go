@@ -258,9 +258,6 @@ func (net *networkImpl) addNode(n mesh.INode) {
 
 	log.Printf("[sim] Node %d: joining network.\n", n.GetID())
 	go n.Run(net)
-
-	// Broadcast a HELLO so new node can discover neighbors.
-	n.SendBroadcastInfo(net)
 }
 
 // removeNode signals the node to stop and removes it from the map.

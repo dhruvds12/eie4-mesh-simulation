@@ -61,6 +61,9 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 
 	if aodv, ok := n.router.(*routing.AODVRouter); ok {
 		aodv.StartPendingTxChecker(net, n)
+		aodv.StartBroadcastTicker(net, n) 
+		
+		aodv.SendDiffBroadcastInfo(net, n)
 	}
 
 	for {
@@ -87,6 +90,7 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 // 	}
 // 	net.UnicastMessage(m, n)
 // }
+
 
 // SendData is a convenience method calling into the router
 func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
@@ -118,7 +122,8 @@ func (n *nodeImpl) SendBroadcastInfo(net mesh.INetwork) {
 	// 	Payload: fmt.Sprintf("Hello from %s", n.id),
 	// }
 	// net.BroadcastMessage(m, n)
-	n.router.SendBroadcastInfo(net, n)
+	// n.router.SendBroadcastInfo(net, n)
+	n.router.SendDiffBroadcastInfo(net, n);
 }
 
 // HandleMessage processes an incoming message.

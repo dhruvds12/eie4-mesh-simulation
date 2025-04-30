@@ -18,6 +18,7 @@ type IRouter interface {
 
 	// initial message to the network to broadcast a hello message
 	SendBroadcastInfo(net mesh.INetwork, node mesh.INode)
+	SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode);
 
 	// print out the routing table
 	PrintRoutingTable()
