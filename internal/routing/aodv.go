@@ -194,14 +194,18 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 	log.Printf("[sim] Node %d (router) -> forwarding data to %d via %d\n", r.ownerID, destID, nextHop)
 	net.BroadcastMessage(completePacket, sender, packetID)
 
-	expire := time.Now().Add(10 * time.Second) // e.g. 3s
-	r.pendingTxs[packetID] = PendingTx{
-		MsgID:               packetID,
-		Dest:                destID,
-		PotentialBrokenNode: nextHop,
-		Origin:              r.ownerID,
-		ExpiryTime:          expire,
+	if destID != nextHop {
+		expire := time.Now().Add(10 * time.Second) // e.g. 3s
+		r.pendingTxs[packetID] = PendingTx{
+			MsgID:               packetID,
+			Dest:                destID,
+			PotentialBrokenNode: nextHop,
+			Origin:              r.ownerID,
+			ExpiryTime:          expire,
+		}
+
 	}
+
 }
 
 func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string) {
@@ -240,13 +244,16 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 	log.Printf("[sim] Node %d (router) -> forwarding user message to %d via %d\n", r.ownerID, userEntry.NodeID, nextHop)
 	net.BroadcastMessage(completePacket, sender, packetID)
 
-	expire := time.Now().Add(10 * time.Second) // e.g. 3s
-	r.pendingTxs[packetID] = PendingTx{
-		MsgID:               packetID,
-		Dest:                userEntry.NodeID,
-		PotentialBrokenNode: nextHop,
-		Origin:              r.ownerID,
-		ExpiryTime:          expire,
+	if userEntry.NodeID != nextHop {
+		expire := time.Now().Add(10 * time.Second) // e.g. 3s
+		r.pendingTxs[packetID] = PendingTx{
+			MsgID:               packetID,
+			Dest:                userEntry.NodeID,
+			PotentialBrokenNode: nextHop,
+			Origin:              r.ownerID,
+			ExpiryTime:          expire,
+		}
+
 	}
 
 }
