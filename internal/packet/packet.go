@@ -351,7 +351,7 @@ func CreateRREQPacket(srcID, destID, orginNode uint32, numHops uint8, packetID .
 	return packetBuffer, pid, nil
 }
 
-func CreateRREPPacket(srcID, destRouteID, nextHopID, orginNode uint32, lifetime uint16, numHops uint8, packetID ...uint32) ([]byte, uint32, error) {
+func CreateRREPPacket(srcID, destRouteID, nextHopID, orginNode uint32, lifetime uint16, numHops, rrepNumHops uint8, packetID ...uint32) ([]byte, uint32, error) {
 
 	pid := chooseID(packetID...)
 
@@ -369,7 +369,7 @@ func CreateRREPPacket(srcID, destRouteID, nextHopID, orginNode uint32, lifetime 
 		OriginNodeID:   orginNode,   // node that wanted the route
 		RREPDestNodeID: destRouteID, // destination of the route
 		Lifetime:       lifetime,
-		NumHops:        numHops,
+		NumHops:        rrepNumHops,
 	}
 
 	bhBytes, err := bh.SerialiseBaseHeader()

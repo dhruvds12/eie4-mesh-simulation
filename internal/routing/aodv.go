@@ -505,7 +505,7 @@ func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, destRREP, sour
 		log.Printf("Node %d: can't send RREP, no route to %d.\n", r.ownerID, sourceRREP)
 		return
 	}
-	rrepPacket, packetID, err := packet.CreateRREPPacket(r.ownerID, destRREP, reverseRoute.NextHop, sourceRREP, 0, 0)
+	rrepPacket, packetID, err := packet.CreateRREPPacket(r.ownerID, destRREP, reverseRoute.NextHop, sourceRREP, 0, 0, uint8(hopCount))
 	if err != nil {
 		return
 	}
@@ -527,7 +527,7 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 	r.seenMsgIDs[bh.PacketID] = true
 
 	// Add forward route to ctrl.Source
-	r.maybeAddRoute(rreph.RREPDestNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+	r.maybeAddRoute(rreph.RREPDestNodeID, bh.SrcNodeID, int(rreph.NumHops)+1)
 	r.maybeAddRoute(bh.SrcNodeID, bh.SrcNodeID, 1)
 
 	// if I'm the original route requester, done
@@ -555,7 +555,7 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 		return
 	}
 
-	rrepPacket, packetID, err := packet.CreateRREPPacket(r.ownerID, rreph.RREPDestNodeID, reverseRoute.Destination, rreph.OriginNodeID, 0, bh.HopCount+1, bh.PacketID)
+	rrepPacket, packetID, err := packet.CreateRREPPacket(r.ownerID, rreph.RREPDestNodeID, reverseRoute.Destination, rreph.OriginNodeID, 0, bh.HopCount+1, rreph.NumHops+1, bh.PacketID)
 	if err != nil {
 		return
 	}
