@@ -895,7 +895,7 @@ func (r *AODVRouter) handleUREP(net mesh.INetwork, node mesh.INode, receivedPack
 		r.addToGUT(uh.UREPUserID, uh.UREPDestNodeID)
 
 		// add to router
-		r.maybeAddRoute(uh.UREPDestNodeID, bh.SrcNodeID, int(bh.HopCount))
+		r.maybeAddRoute(uh.UREPDestNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
 
 		// do some thing like send the messages that were queued
 
@@ -937,8 +937,8 @@ func (r *AODVRouter) handleUERR(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 	r.seenMsgIDs[bh.PacketID] = true
 
-	if r.ownerID == uh.OriginNode {
-		r.removeUserEntry(uh.UERRUserID, uh.UERRNodeID)
+	if r.ownerID == uh.OriginNodeID {
+		r.removeUserEntry(uh.UserID, uh.NodeID)
 		log.Printf("[UERR RECEIVED] Node %d received a uerr ", r.ownerID)
 		// should not remove route as a UERR is only tiggered
 		delete(r.pendingTxs, uh.OriginalPacketID)
@@ -946,18 +946,18 @@ func (r *AODVRouter) handleUERR(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 
 	// else forward the message to destination
-	reverseRoute := r.routeTable[uh.OriginNode]
+	reverseRoute := r.routeTable[uh.OriginNodeID]
 	if reverseRoute == nil {
-		log.Printf("Node %d: got UERR but no route back to %d.\n", r.ownerID, uh.OriginNode)
+		log.Printf("Node %d: got UERR but no route back to %d.\n", r.ownerID, uh.OriginNodeID)
 		return
 	}
 
 	// Otherwise forward the rreq
-	fwdUREP, packetId, err := packet.CreateUERRPacket(r.ownerID, reverseRoute.NextHop, uh.UERRUserID, uh.UERRNodeID, uh.OriginalPacketID, bh.PacketID)
+	fwdUREP, packetId, err := packet.CreateUERRPacket(r.ownerID, reverseRoute.NextHop, uh.UserID, uh.NodeID, uh.OriginalPacketID, bh.PacketID)
 	if err != nil {
 		return
 	}
-	log.Printf("[UERR FORWARD] Node %d: forwarding UERR to %d via %d\n", r.ownerID, uh.OriginNode, reverseRoute.NextHop)
+	log.Printf("[UERR FORWARD] Node %d: forwarding UERR to %d via %d\n", r.ownerID, uh.OriginNodeID, reverseRoute.NextHop)
 	// net.BroadcastMessage(fwdMsg, node)
 	r.BroadcastMessageCSMA(net, node, fwdUREP, packetId)
 

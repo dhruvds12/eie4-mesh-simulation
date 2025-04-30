@@ -25,7 +25,7 @@ const MaxPacketSize = 255
 
 const BROADCAST_ADDR uint32 = 0xFFFFFFFF
 
-const MAX_HOPS = 3
+const MAX_HOPS = 5
 
 type BaseHeader struct {
 	DestNodeID uint32 // destination of the hop not the route
@@ -86,9 +86,9 @@ type UREPHeader struct {
 
 // Different to RERR used when the node was found but the user was not at the node
 type UERRHeader struct {
-	UERRUserID       uint32 // id of user that is not found
-	UERRNodeID       uint32 // id of node that we thought the user was at
-	OriginNode       uint32
+	UserID       uint32 // id of user that is not found
+	NodeID       uint32 // id of node that we thought the user was at
+	OriginNodeID       uint32
 	OriginalPacketID uint32
 }
 
@@ -791,9 +791,9 @@ func CreateUERRPacket(
 		Reserved:   0,
 	}
 	h := UERRHeader{
-		UERRUserID:       uerrUserID,
-		UERRNodeID:       uerrNodeID,
-		OriginNode:       originNodeID,
+		UserID:       uerrUserID,
+		NodeID:       uerrNodeID,
+		OriginNodeID:       originNodeID,
 		OriginalPacketID: originalPacketID,
 	}
 
@@ -805,9 +805,9 @@ func CreateUERRPacket(
 
 	// serialize extended header (4×4 B)
 	hb := make([]byte, 16)
-	binary.LittleEndian.PutUint32(hb[0:4], h.UERRUserID)
-	binary.LittleEndian.PutUint32(hb[4:8], h.UERRNodeID)
-	binary.LittleEndian.PutUint32(hb[8:12], h.OriginNode)
+	binary.LittleEndian.PutUint32(hb[0:4], h.UserID)
+	binary.LittleEndian.PutUint32(hb[4:8], h.NodeID)
+	binary.LittleEndian.PutUint32(hb[8:12], h.OriginNodeID)
 	binary.LittleEndian.PutUint32(hb[12:16], h.OriginalPacketID)
 
 	// combine and return
@@ -838,9 +838,9 @@ func DeserialiseUERRPacket(
 	}
 	ofs := 16
 	h := UERRHeader{
-		UERRUserID:       binary.LittleEndian.Uint32(buf[ofs+0 : ofs+4]),
-		UERRNodeID:       binary.LittleEndian.Uint32(buf[ofs+4 : ofs+8]),
-		OriginNode:       binary.LittleEndian.Uint32(buf[ofs+8 : ofs+12]),
+		UserID:       binary.LittleEndian.Uint32(buf[ofs+0 : ofs+4]),
+		NodeID:       binary.LittleEndian.Uint32(buf[ofs+4 : ofs+8]),
+		OriginNodeID:       binary.LittleEndian.Uint32(buf[ofs+8 : ofs+12]),
 		OriginalPacketID: binary.LittleEndian.Uint32(buf[ofs+12 : ofs+16]),
 	}
 	return bh, h, nil
