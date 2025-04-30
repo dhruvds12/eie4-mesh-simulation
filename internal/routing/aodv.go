@@ -298,7 +298,8 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 		// Only the intended recipient should handle
 		if bh.DestNodeID == r.ownerID {
 			log.Printf("Node %d: received DATA_ACK\n", r.ownerID)
-			r.HandleDataAck(receivedPacket)
+			//TODO: Explicit acks disabled
+			// r.HandleDataAck(receivedPacket)
 		}
 	case packet.PKT_DATA:
 		// Overhearing logic for implicit ACKs
@@ -707,6 +708,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 			Timestamp:   time.Now(),
 		})
 		// TODO: this is a simplification as this should depend on the packet header -> should not always be sending an ack
+		//TODO: Explicit ack disabled
 		r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
 		return
 	}
@@ -737,7 +739,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	r.BroadcastMessageCSMA(net, node, dataPacket, packetID)
 
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
-	if route.NextHop == dest {
+	if route.NextHop != dest {
 		// log.Printf("{Implicit ACK} Node %d: overheard forward from %d => implicit ack for msgID=%d", r.ownerID, originID, msg.GetID())
 		// TODO: need to wait for an explicit ACK request from sender (simplified)
 		expire := time.Now().Add(3 * time.Second) // e.g. 3s
@@ -751,15 +753,15 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
-	// If the next hop is not the destination, we need to track the transaction by overhearing it
-	expire := time.Now().Add(3 * time.Second) // e.g. 3s
-	r.pendingTxs[bh.PacketID] = PendingTx{
-		MsgID:               bh.PacketID,
-		Dest:                dest,
-		PotentialBrokenNode: route.NextHop,
-		Origin:              bh.SrcNodeID,
-		ExpiryTime:          expire,
-	}
+	// // If the next hop is not the destination, we need to track the transaction by overhearing it
+	// expire := time.Now().Add(3 * time.Second) // e.g. 3s
+	// r.pendingTxs[bh.PacketID] = PendingTx{
+	// 	MsgID:               bh.PacketID,
+	// 	Dest:                dest,
+	// 	PotentialBrokenNode: route.NextHop,
+	// 	Origin:              bh.SrcNodeID,
+	// 	ExpiryTime:          expire,
+	// }
 
 }
 
@@ -817,13 +819,17 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	}
 
 	r.BroadcastMessageCSMA(net, node, userMessagePacket, packetID)
-	expire := time.Now().Add(3 * time.Second) // e.g. 3s
-	r.pendingTxs[bh.PacketID] = PendingTx{
-		MsgID:               bh.PacketID,
-		Dest:                dest,
-		PotentialBrokenNode: route.NextHop,
-		Origin:              bh.SrcNodeID,
-		ExpiryTime:          expire,
+
+	if route.NextHop != dest {
+		expire := time.Now().Add(3 * time.Second) // e.g. 3s
+		r.pendingTxs[bh.PacketID] = PendingTx{
+			MsgID:               bh.PacketID,
+			Dest:                dest,
+			PotentialBrokenNode: route.NextHop,
+			Origin:              bh.SrcNodeID,
+			ExpiryTime:          expire,
+		}
+
 	}
 
 }
@@ -1064,6 +1070,11 @@ func (r *AODVRouter) InvalidateRoutes(brokenNode uint32, dest uint32, sender uin
 
 // send ack for data packets
 func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uint32, prevMsgId uint32) {
+
+	if true {
+		log.Println("[sim] disabled explicit acks")
+		return
+	}
 
 	route, ok := r.routeTable[to]
 	if !ok {
