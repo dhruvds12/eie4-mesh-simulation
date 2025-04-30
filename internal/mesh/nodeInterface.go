@@ -1,5 +1,7 @@
 package mesh
 
+
+
 type INode interface {
 	GetID() uint32
 	Run(net INetwork)
