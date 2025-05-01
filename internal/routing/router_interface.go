@@ -9,7 +9,7 @@ type IRouter interface {
 	// Called by the node to send data to destID
 	SendData(net mesh.INetwork, sender mesh.INode, destID uint32, payload string)
 	// Called by the node to send data to destID using CSMA
-	SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID uint32, payload string)
+	// SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID uint32, payload string)
 	// Called by the node when it receives *any* message, so the router can process RREQ, RREP, or forward data
 	HandleMessage(net mesh.INetwork, node mesh.INode, msg []byte)
 
