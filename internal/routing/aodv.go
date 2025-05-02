@@ -65,7 +65,8 @@ type userMessageQueueEntry struct {
 type AODVRouter struct {
 	ownerID          uint32
 	routeMu          sync.RWMutex
-	routeTable       map[uint32]*RouteEntry             // key = destination ID
+	routeTable       map[uint32]*RouteEntry // key = destination ID
+	seenMu           sync.RWMutex
 	seenMsgIDs       map[uint32]bool                    // deduplicate RREQ/RREP
 	dataQueue        map[uint32][]DataQueueEntry        // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
 	userMessageQueue map[uint32][]userMessageQueueEntry // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
@@ -444,7 +445,7 @@ func (r *AODVRouter) AddRouteEntry(dest, nextHop uint32, hopCount int) {
 }
 
 func (r *AODVRouter) RemoveRouteEntry(dest uint32) {
-	route , ok:= r.getRoute(dest)
+	route, ok := r.getRoute(dest)
 
 	if !ok {
 		return
@@ -491,11 +492,11 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, buf
 	}
 	ofs := 16
 
-	if r.seenMsgIDs[bh.PacketID] {
+	if r.checkSeenPackets(bh.PacketID) {
 		// already processed – ignore and DO NOT forward
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 
 	var dh packet.DiffBroadcastInfoHeader
 	if err := dh.Deserialise(buf[ofs:]); err != nil {
@@ -554,11 +555,12 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	if err != nil {
 		return
 	}
-	if r.seenMsgIDs[bh.PacketID] {
+
+	if r.checkSeenPackets(bh.PacketID) {
 		log.Printf("Node %d: ignoring duplicate RREQ.\n", r.ownerID)
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 	// Add reverse route to RREQ source
 	r.maybeAddRoute(rh.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
 
@@ -588,7 +590,7 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 // ONLY use to initate rrep
 func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, destRREP, sourceRREP uint32, hopCount int) {
 	// find route to 'source' in reverse direction
-	reverseRoute , ok:= r.getRoute(sourceRREP)
+	reverseRoute, ok := r.getRoute(sourceRREP)
 	if !ok {
 		log.Printf("Node %d: can't send RREP, no route to %d.\n", r.ownerID, sourceRREP)
 		return
@@ -610,10 +612,11 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 	if err != nil {
 		return
 	}
-	if r.seenMsgIDs[bh.PacketID] {
+	if r.checkSeenPackets(bh.PacketID) {
+		log.Printf("Node %d: ignoring duplicate RREP.\n", r.ownerID)
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 
 	// Add forward route to ctrl.Source
 	r.maybeAddRoute(rreph.RREPDestNodeID, bh.SrcNodeID, int(rreph.NumHops)+1)
@@ -638,7 +641,7 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 
 	// else forward RREP
-	reverseRoute , ok:= r.getRoute(rreph.RREPDestNodeID)
+	reverseRoute, ok := r.getRoute(rreph.RREPDestNodeID)
 	if !ok {
 		log.Printf("Node %d: got RREP but no route back to %d.\n", r.ownerID, rreph.RREPDestNodeID)
 		return
@@ -662,8 +665,6 @@ func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uint32, dat
 		return
 	}
 
-	r.seenMsgIDs[packetID] = true
-
 	log.Printf("[sim] Node %d: sending RERR to %d about broken route for %d.\n", r.ownerID, to, dataDest)
 	// net.BroadcastMessage(rerrMsg, node)
 	// r.BroadcastMessageCSMA(net, node, rerrPacket, packetID)
@@ -677,10 +678,11 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, receivedPack
 	if err != nil {
 		return
 	}
-	if r.seenMsgIDs[bh.PacketID] {
+	if r.checkSeenPackets(bh.PacketID) {
+		log.Printf("Node %d: ignoring duplicate RERR.\n", r.ownerID)
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 
 	log.Printf("[sim] Node %d: received RERR => broken node: %d for dest %d\n", r.ownerID, rerrHeader.BrokenNodeID, rerrHeader.OriginalDestNodeID)
 
@@ -743,11 +745,10 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
-	if r.seenMsgIDs[bh.PacketID] {
+	if r.checkSeenPackets(bh.PacketID) {
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
-
+	r.addSeenPacket(bh.PacketID)
 	payloadString := string(payload)
 	// If I'm the final destination, do nothing -> the node can "deliver" it
 	if dh.FinalDestID == r.ownerID {
@@ -825,10 +826,10 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
-	if r.seenMsgIDs[bh.PacketID] {
+	if r.checkSeenPackets(bh.PacketID) {
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 
 	payloadString := string(payload)
 	if umh.ToNodeID == r.ownerID {
@@ -903,10 +904,10 @@ func (r *AODVRouter) HandleDataAck(receivedPacket []byte) {
 		return
 	}
 
-	if r.seenMsgIDs[bh.PacketID] {
+	if r.checkSeenPackets(bh.PacketID) {
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 
 	// log.Printf("{ACK} Node %d: received ACK for msgID=%d\n", r.ownerID, ack.MsgID)
 
@@ -958,11 +959,10 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	if err != nil {
 		return
 	}
-	if r.seenMsgIDs[bh.PacketID] {
-		log.Printf("Node %d: ignoring duplicate UREQ.\n", r.ownerID)
+	if r.checkSeenPackets(bh.PacketID) {
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 
 	// add routes
 
@@ -1005,11 +1005,10 @@ func (r *AODVRouter) handleUREP(net mesh.INetwork, node mesh.INode, receivedPack
 	if err != nil {
 		return
 	}
-	if r.seenMsgIDs[bh.PacketID] {
-		log.Printf("Node %d: ignoring duplicate UREP.\n", r.ownerID)
+	if r.checkSeenPackets(bh.PacketID) {
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 
 	if r.ownerID == uh.OriginNodeID {
 		// store in the GUT
@@ -1030,7 +1029,7 @@ func (r *AODVRouter) handleUREP(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 
 	// find next hop from routing table - should have way back
-	reverseRoute , ok:= r.getRoute(uh.UREPDestNodeID)
+	reverseRoute, ok := r.getRoute(uh.UREPDestNodeID)
 	if !ok {
 		log.Printf("Node %d: got UREP but no route back to %d.\n", r.ownerID, uh.UREPDestNodeID)
 		return
@@ -1053,11 +1052,10 @@ func (r *AODVRouter) handleUERR(net mesh.INetwork, node mesh.INode, receivedPack
 	if err != nil {
 		return
 	}
-	if r.seenMsgIDs[bh.PacketID] {
-		log.Printf("Node %d: ignoring duplicate UERR.\n", r.ownerID)
+	if r.checkSeenPackets(bh.PacketID) {
 		return
 	}
-	r.seenMsgIDs[bh.PacketID] = true
+	r.addSeenPacket(bh.PacketID)
 
 	if r.ownerID == uh.OriginNodeID {
 		r.removeUserEntry(uh.UserID, uh.NodeID)
@@ -1144,8 +1142,6 @@ func (r *AODVRouter) InvalidateRoutes(brokenNode uint32, dest uint32, sender uin
 	}
 	r.routeMu.Unlock()
 }
-
-
 
 // send ack for data packets
 func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uint32, prevMsgId uint32) {
@@ -1255,7 +1251,6 @@ func (r *AODVRouter) getRoute(NodeID uint32) (RouteEntry, bool) {
 	return RouteEntry{}, ok
 }
 
-
 func (r *AODVRouter) insertRouteEntry(NodeID uint32, re RouteEntry) {
 	r.routeMu.Lock()
 	r.routeTable[NodeID] = &re
@@ -1268,3 +1263,16 @@ func (r *AODVRouter) removeRoute(NodeID uint32) {
 	r.routeMu.Unlock()
 
 }
+
+func (r *AODVRouter) checkSeenPackets(packetID uint32) bool {
+	r.seenMu.RLock()
+	ans := r.seenMsgIDs[packetID]
+	r.seenMu.RUnlock()
+	return ans
+}
+
+func (r *AODVRouter) addSeenPacket(packetID uint32) {
+	r.seenMu.Lock()
+	r.seenMsgIDs[packetID] = true
+	r.seenMu.Unlock()
+} 

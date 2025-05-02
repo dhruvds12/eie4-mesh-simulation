@@ -8,6 +8,7 @@ import (
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
+	"mesh-simulation/internal/metrics"
 )
 
 const (
@@ -42,9 +43,9 @@ func sendersCanCollide(senderA, senderB mesh.INode) bool {
 	return dist <= (2 * maxRange)
 }
 
-type networkImpl struct {
+type NetworkImpl struct {
 	mu    sync.RWMutex
-	nodes map[uint32]mesh.INode
+	Nodes map[uint32]mesh.INode
 
 	joinRequests  chan mesh.INode
 	leaveRequests chan uint32
@@ -58,8 +59,8 @@ type networkImpl struct {
 
 // NewNetwork creates a new instance of the network.
 func NewNetwork(bus *eventBus.EventBus) mesh.INetwork {
-	net := &networkImpl{
-		nodes:         make(map[uint32]mesh.INode),
+	net := &NetworkImpl{
+		Nodes:         make(map[uint32]mesh.INode),
 		joinRequests:  make(chan mesh.INode),
 		leaveRequests: make(chan uint32),
 		transmissions: make(map[uint32]*Transmission),
@@ -72,7 +73,7 @@ func NewNetwork(bus *eventBus.EventBus) mesh.INetwork {
 }
 
 // runPruner runs periodically (every PruneInterval) to remove transmissions that ended more than TransmissionGrace ago.
-func (net *networkImpl) runPruner() {
+func (net *NetworkImpl) runPruner() {
 	ticker := time.NewTicker(PruneInterval)
 	defer ticker.Stop()
 	for {
@@ -86,7 +87,7 @@ func (net *networkImpl) runPruner() {
 }
 
 // pruneTransmissions iterates over the transmissions map and removes any transmission whose EndTime is more than TransmissionGrace ago.
-func (net *networkImpl) pruneTransmissions() {
+func (net *NetworkImpl) pruneTransmissions() {
 	net.mu.Lock()
 	defer net.mu.Unlock()
 	now := time.Now()
@@ -101,7 +102,7 @@ func (net *networkImpl) pruneTransmissions() {
 }
 
 // Run is the main goroutine for the network, handling joins/leaves.
-func (net *networkImpl) Run() {
+func (net *NetworkImpl) Run() {
 	for {
 		select {
 		case newNode := <-net.joinRequests:
@@ -113,24 +114,24 @@ func (net *networkImpl) Run() {
 }
 
 // Join adds a node to the network.
-func (net *networkImpl) Join(n mesh.INode) {
+func (net *NetworkImpl) Join(n mesh.INode) {
 	net.joinRequests <- n
 }
 
 // Leave removes a node from the network by ID.
-func (net *networkImpl) Leave(nodeID uint32) {
+func (net *NetworkImpl) Leave(nodeID uint32) {
 	net.leaveRequests <- nodeID
 }
 
-func (net *networkImpl) LeaveAll() {
-	for id := range net.nodes {
+func (net *NetworkImpl) LeaveAll() {
+	for id := range net.Nodes {
 		net.leaveRequests <- id
 	}
 }
 
 // / deliverIfNoCollision checks for each recipient in tx.Recipients whether that recipient
 // sees any overlapping transmission. If so, delivery is skipped for that node; otherwise, delivered.
-func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode) {
+func (net *NetworkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode) {
 	// For each recipient from our pre-filtered list:
 	// set inactive
 	net.mu.Lock()
@@ -170,11 +171,15 @@ func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 				}
 			}
 		}
-
+		pktType := tx.Packet[12]
 		// If more than zero overlapping transmissions affect this node, drop delivery.
 		if overlappingCount > 0 {
 			log.Printf("[Collision] At node %d, skipping delivery of msg %d due to %d overlapping transmission(s).\n",
 				nd.GetID(), tx.PacketID, overlappingCount)
+
+			if metrics.Global != nil { // <-- new guard
+				metrics.Global.AddCollision(pktType)
+			}
 		} else {
 			nd.GetMessageChan() <- tx.Packet
 			log.Printf("[Network] Delivered msg %d to node %d.\n", tx.PacketID, nd.GetID())
@@ -185,7 +190,7 @@ func (net *networkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 // BroadcastMessage simulates a broadcast transmission. It pre-filters the recipient nodes
 // that are in range of the sender at the start of transmission and creates a Transmission record.
 // The transmission record is kept in the global map until it is pruned by the pruner goroutine.
-func (net *networkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packetID uint32) {
+func (net *NetworkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packetID uint32) {
 	net.mu.Lock()
 
 	start := time.Now()
@@ -193,7 +198,7 @@ func (net *networkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packe
 
 	// Pre-filter nodes: build a list of nodes that are in range of the sender at transmission start.
 	var recipients []mesh.INode
-	for id, nd := range net.nodes {
+	for id, nd := range net.Nodes {
 		if id == sender.GetID() {
 			continue
 		}
@@ -232,11 +237,11 @@ func (net *networkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packe
 }
 
 // UnicastMessage simulates a direct unicast from sender to msg.To().
-func (net *networkImpl) UnicastMessage(msg []byte, sender mesh.INode, packetID uint32, to uint32) {
+func (net *NetworkImpl) UnicastMessage(msg []byte, sender mesh.INode, packetID uint32, to uint32) {
 	net.mu.RLock()
 	defer net.mu.RUnlock()
 
-	if receiver, ok := net.nodes[to]; ok {
+	if receiver, ok := net.Nodes[to]; ok {
 		if net.IsInRange(sender, receiver) {
 			ndChan := net.getNodeChannel(receiver)
 			ndChan <- msg
@@ -251,9 +256,9 @@ func (net *networkImpl) UnicastMessage(msg []byte, sender mesh.INode, packetID u
 }
 
 // addNode inserts the node into the map, starts its goroutine, and triggers a broadcast HELLO.
-func (net *networkImpl) addNode(n mesh.INode) {
+func (net *NetworkImpl) addNode(n mesh.INode) {
 	net.mu.Lock()
-	net.nodes[n.GetID()] = n
+	net.Nodes[n.GetID()] = n
 	net.mu.Unlock()
 
 	log.Printf("[sim] Node %d: joining network.\n", n.GetID())
@@ -261,26 +266,31 @@ func (net *networkImpl) addNode(n mesh.INode) {
 }
 
 // removeNode signals the node to stop and removes it from the map.
-func (net *networkImpl) removeNode(nodeID uint32) {
+func (net *NetworkImpl) removeNode(nodeID uint32) {
 	net.mu.Lock()
-	if nd, ok := net.nodes[nodeID]; ok {
+	if nd, ok := net.Nodes[nodeID]; ok {
 		// Close the node's quit channel if there's a direct handle
 		// We don't have a direct reference to 'quit', so let's do a type check
-		if ni, ok := nd.(interface{ QuitChan() chan struct{} }); ok {
-			close(ni.QuitChan())
+		// if ni, ok := nd.(interface{ QuitChan() chan struct{} }); ok {
+		// 	close(ni.QuitChan())
+		// }
+
+		if cg, ok := nd.(interface{ GetQuitChan() chan struct{} }); ok {
+			close(cg.GetQuitChan())
 		}
+
 		// Print out the details of the leavign node
 		log.Printf("[sim] Node %d: leaving network.\n", nodeID)
-		net.nodes[nodeID].PrintNodeDetails()
+		net.Nodes[nodeID].PrintNodeDetails()
 		// Remove the node from the map
-		delete(net.nodes, nodeID)
+		delete(net.Nodes, nodeID)
 	}
 	net.mu.Unlock()
 }
 
 // getNodeChannel is a helper to get the 'messages' channel from the node.
 // Because node.INode is an interface, we do a type assertion.
-func (net *networkImpl) getNodeChannel(n mesh.INode) chan []byte {
+func (net *NetworkImpl) getNodeChannel(n mesh.INode) chan []byte {
 	type channelGetter interface {
 		GetMessageChan() chan []byte
 	}
@@ -291,14 +301,14 @@ func (net *networkImpl) getNodeChannel(n mesh.INode) chan []byte {
 }
 
 // Check if a node is in range to recieve signal from another node
-func (net *networkImpl) IsInRange(node1 mesh.INode, node2 mesh.INode) bool {
+func (net *NetworkImpl) IsInRange(node1 mesh.INode, node2 mesh.INode) bool {
 	return node1.GetPosition().DistanceTo(node2.GetPosition()) <= maxRange
 }
 
 // Check if the channel if free for transmission
 // Checks each transmission in the map to see if the node is within range of any on going transmission
 // Used as part of CSMA/CA
-func (net *networkImpl) IsChannelFree(node mesh.INode) bool {
+func (net *NetworkImpl) IsChannelFree(node mesh.INode) bool {
 	net.mu.RLock()
 	defer net.mu.RUnlock()
 	for _, tx := range net.transmissions {
@@ -310,10 +320,10 @@ func (net *networkImpl) IsChannelFree(node mesh.INode) bool {
 }
 
 // get node from map
-func (net *networkImpl) GetNode(nodeId uint32) (mesh.INode, error) {
+func (net *NetworkImpl) GetNode(nodeId uint32) (mesh.INode, error) {
 	net.mu.RLock()
 	defer net.mu.RUnlock()
-	if nd, ok := net.nodes[nodeId]; ok {
+	if nd, ok := net.Nodes[nodeId]; ok {
 		return nd, nil
 	}
 	return nil, fmt.Errorf("node with id %d not found", nodeId)
