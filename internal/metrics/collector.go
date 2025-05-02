@@ -41,7 +41,7 @@ func (c *Collector) AddDelivered(ev eb.Event) {
     c.mu.Lock()
     c.TotalDelivered++
     if ev.OtherNodeID != 0 {
-        c.HopSum += uint64(ev.OtherNodeID) // here OtherNodeID is reused for hops in the example
+        c.HopSum += uint64(ev.OtherNodeID)
         c.HopCount++
     }
     c.mu.Unlock()

@@ -9,16 +9,18 @@ import (
 type EventType string
 
 const (
-	EventNodeJoined       EventType = "NODE_JOINED"
-	EventNodeLeft         EventType = "NODE_LEFT"
-	EventMessageSent      EventType = "MESSAGE_SENT"
-	EventMessageDelivered EventType = "MESSAGE_DELIVERED"
-	EventAddRouteEntry    EventType = "ADD_ROUTE_ENTRY"
-	EventMovedNode        EventType = "MOVED_NODE"
-	EventRemoveRouteEntry EventType = "REMOVED_ROUTE_ENTRY"
-	EventCreateUser       EventType = "CREATE_USER"
-	EventDeleteUser       EventType = "DELETE_USER"
-	EventUserMessage      EventType = "USER_MESSAGE"
+	EventNodeJoined              EventType = "NODE_JOINED"
+	EventNodeLeft                EventType = "NODE_LEFT"
+	EventMessageSent             EventType = "MESSAGE_SENT"
+	EventMessageDelivered        EventType = "MESSAGE_DELIVERED"
+	EventAddRouteEntry           EventType = "ADD_ROUTE_ENTRY"
+	EventMovedNode               EventType = "MOVED_NODE"
+	EventRemoveRouteEntry        EventType = "REMOVED_ROUTE_ENTRY"
+	EventCreateUser              EventType = "CREATE_USER"
+	EventDeleteUser              EventType = "DELETE_USER"
+	EventUserMessage             EventType = "USER_MESSAGE"
+	EventControlMessageDelivered EventType = "CONTROL_MESSAGE_DELIVERED"
+	EventControlMessageSent      EventType = "CONTROL_MESSAGE_SENT"
 )
 
 // RouteEntry represents an entry in the routing table.

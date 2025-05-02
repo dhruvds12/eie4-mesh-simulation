@@ -147,6 +147,8 @@ func (net *NetworkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 	}
 	net.mu.RUnlock()
 
+	collision := false
+	pktType := tx.Packet[12]
 	for _, nd := range tx.Recipients {
 		// Check again that the node is still in range (e.g. if nodes move).
 		if !net.IsInRange(sender, nd) {
@@ -171,19 +173,19 @@ func (net *NetworkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 				}
 			}
 		}
-		pktType := tx.Packet[12]
 		// If more than zero overlapping transmissions affect this node, drop delivery.
 		if overlappingCount > 0 {
 			log.Printf("[Collision] At node %d, skipping delivery of msg %d due to %d overlapping transmission(s).\n",
 				nd.GetID(), tx.PacketID, overlappingCount)
-
-			if metrics.Global != nil { // <-- new guard
-				metrics.Global.AddCollision(pktType)
-			}
+			collision = true
 		} else {
 			nd.GetMessageChan() <- tx.Packet
 			log.Printf("[Network] Delivered msg %d to node %d.\n", tx.PacketID, nd.GetID())
 		}
+	}
+
+	if metrics.Global != nil && collision{
+		metrics.Global.AddCollision(pktType)
 	}
 }
 

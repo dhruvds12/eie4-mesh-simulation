@@ -34,7 +34,6 @@ func (r *Runner) Run() error {
 	// go func() { defer r.wg.Done(); r.net.Run() }()
 	go r.net.Run()
 
-
 	// ── build nodes & users ────────────────────────────────────────────────
 	// for i := 0; i < r.sc.Nodes.Count; i++ {
 	// 	lat := rand.Float64() * r.sc.AreaKm2
@@ -91,7 +90,7 @@ func (r *Runner) Run() error {
 			if leaver, ok := r.net.(interface{ LeaveAll() }); ok {
 				leaver.LeaveAll()
 			}
-			
+
 			r.wg.Wait()
 			return nil
 		case <-tick.C:
@@ -106,6 +105,10 @@ func (r *Runner) consumeEvents(ch chan eb.Event) {
 		case eb.EventMessageSent:
 			r.coll.AddSent()
 		case eb.EventMessageDelivered:
+			r.coll.AddDelivered(ev)
+		case eb.EventControlMessageSent:
+			r.coll.AddSent()
+		case eb.EventControlMessageDelivered:
 			r.coll.AddDelivered(ev)
 		}
 	}
@@ -144,7 +147,7 @@ func (r *Runner) emitRandomTraffic() {
 	case "BROADCAST":
 		from.SendBroadcastInfo(r.net)
 	}
-	r.coll.AddSent()
+	// r.coll.AddSent()
 }
 
 func choosePacket(m map[string]float64) string {

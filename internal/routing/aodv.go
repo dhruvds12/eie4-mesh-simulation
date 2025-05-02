@@ -212,6 +212,9 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 
 	log.Printf("[sim] Node %d (router) -> forwarding data to %d via %d\n", r.ownerID, destID, nextHop)
 	// r.BroadcastMessageCSMA(net, sender, completePacket, packetID)
+	r.eventBus.Publish(eventBus.Event{
+		Type: eventBus.EventMessageSent,
+	})
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
 
 	if destID != nextHop {
@@ -263,6 +266,9 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 
 	log.Printf("[sim] Node %d (router) -> forwarding user message to %d via %d\n", r.ownerID, userEntry.NodeID, nextHop)
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
+	r.eventBus.Publish(eventBus.Event{
+		Type: eventBus.EventMessageSent,
+	})
 
 	if userEntry.NodeID != nextHop {
 		expire := time.Now().Add(10 * time.Second) // e.g. 3s
@@ -418,6 +424,9 @@ func (r *AODVRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 	if err == nil {
 		// r.BroadcastMessageCSMA(net, node, pkt, pid)
 		r.txQueue <- outgoingTx{net: net, sender: node, pkt: pkt, pktID: pid}
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageSent,
+		})
 	}
 	r.lastUsersShadow = now
 }
@@ -498,6 +507,10 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, buf
 	}
 	r.addSeenPacket(bh.PacketID)
 
+	r.eventBus.Publish(eventBus.Event{
+		Type:        eventBus.EventControlMessageDelivered,
+	})
+
 	var dh packet.DiffBroadcastInfoHeader
 	if err := dh.Deserialise(buf[ofs:]); err != nil {
 		return
@@ -546,6 +559,9 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 	log.Printf("[sim] [RREQ init] Node %d (router) -> initiating RREQ for %d (hop count %d)\n", r.ownerID, destID, 0)
 	// net.BroadcastMessage(rreqMsg, sender)
 	// r.BroadcastMessageCSMA(net, sender, rreqPacket, packetID)
+	r.eventBus.Publish(eventBus.Event{
+		Type: eventBus.EventControlMessageSent,
+	})
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: rreqPacket, pktID: packetID}
 }
 
@@ -567,12 +583,18 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	// if I'm the destination, send RREP
 	if r.ownerID == rh.RREQDestNodeID {
 		log.Printf("[sim] Node %d: RREQ arrived at destination.\n", r.ownerID)
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageDelivered,
+		})
 		r.sendRREP(net, node, rh.RREQDestNodeID, rh.OriginNodeID, 0) // Should this reset to 0 (yes)
 		return
 	}
 
 	// If we have a route to the destination, we can send RREP
 	if route, ok := r.getRoute(rh.RREQDestNodeID); ok {
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageDelivered,
+		})
 		r.sendRREP(net, node, rh.RREQDestNodeID, rh.OriginNodeID, route.HopCount)
 		return
 	}
@@ -602,6 +624,9 @@ func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, destRREP, sour
 	log.Printf("[sim] [RREP] Node %d: sending RREP to %d via %d current hop count: %d\n", r.ownerID, destRREP, reverseRoute.NextHop, hopCount)
 	// net.BroadcastMessage(rrepMsg, node)
 	// r.BroadcastMessageCSMA(net, node, rrepPacket, packetID)
+	r.eventBus.Publish(eventBus.Event{
+		Type: eventBus.EventControlMessageSent,
+	})
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: rrepPacket, pktID: packetID}
 }
 
@@ -625,6 +650,9 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 	// if I'm the original route requester, done
 	if r.ownerID == rreph.RREPDestNodeID {
 		log.Printf("Node %d: route to %d established!\n", r.ownerID, rreph.OriginNodeID)
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageDelivered,
+		})
 		// send any queued data
 		for _, dqe := range r.dataQueue[rreph.OriginNodeID] {
 			if dqe.packetType == packet.PKT_DATA {
@@ -669,6 +697,9 @@ func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uint32, dat
 	// net.BroadcastMessage(rerrMsg, node)
 	// r.BroadcastMessageCSMA(net, node, rerrPacket, packetID)
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: rerrPacket, pktID: packetID}
+	r.eventBus.Publish(eventBus.Event{
+		Type: eventBus.EventControlMessageSent,
+	})
 }
 
 // Everyone who receives RERR should handle this (only intended recipient should forward to source) (source should not forward)
@@ -691,6 +722,9 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, receivedPack
 
 	if r.ownerID != bh.DestNodeID {
 		// Check if node is the intended target
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageDelivered,
+		})
 		log.Printf("{RERR} Node %d: received RERR not intended for me.\n", r.ownerID)
 		return
 	}
@@ -791,6 +825,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	log.Printf("[sim] Node %d: forwarding DATA from %d to %d via %d\n", r.ownerID, bh.SrcNodeID, dest, route.NextHop)
 	// net.BroadcastMessage(fwdMsg, node)
 	// r.BroadcastMessageCSMA(net, node, dataPacket, packetID)
+
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: dataPacket, pktID: packetID}
 
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
@@ -877,7 +912,6 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	if err != nil {
 		return
 	}
-
 	// r.BroadcastMessageCSMA(net, node, userMessagePacket, packetID)
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: userMessagePacket, pktID: packetID}
 
@@ -927,6 +961,9 @@ func (r *AODVRouter) initiateUREQ(net mesh.INetwork, sender mesh.INode, targetUs
 	// net.BroadcastMessage(rreqMsg, sender)
 	// r.BroadcastMessageCSMA(net, sender, rreqPacket, packetID)
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: ureqPacket, pktID: packetID}
+	r.eventBus.Publish(eventBus.Event{
+		Type: eventBus.EventControlMessageSent,
+	})
 }
 
 func (r *AODVRouter) initiateUREP(net mesh.INetwork, sender mesh.INode, destID, ureqOrigin uint32, targetUser uint32) {
@@ -952,6 +989,9 @@ func (r *AODVRouter) initiateUERR(net mesh.INetwork, sender mesh.INode, destNode
 	// net.BroadcastMessage(rreqMsg, sender)
 	// r.BroadcastMessageCSMA(net, sender, rreqPacket, packetID)
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: uerrPacket, pktID: packetID}
+	r.eventBus.Publish(eventBus.Event{
+		Type: eventBus.EventMessageSent,
+	})
 }
 
 func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPacket []byte) {
@@ -970,21 +1010,33 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	r.maybeAddRoute(uh.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
 
 	if node.HasConnectedUser(uh.UREQUserID) {
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageDelivered,
+		})
 		// user connected to me return UREQ
 		log.Printf("[sim] [UREQ] Node %d: has user connected%d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
 		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, r.ownerID, uh.UREQUserID, 0, 0)
 		// r.BroadcastMessageCSMA(net, node, reply, pid)
 		r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageSent,
+		})
 		return
 	}
 
 	// If I have a path to user reply
 	if n, ok := r.hasUserEntry(uh.UREQUserID); ok {
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageDelivered,
+		})
 		// reply with UREP along reverse path
 		log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount)
 		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, 0)
 		// r.BroadcastMessageCSMA(net, node, reply, pid)
 		r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageSent,
+		})
 		return
 	}
 
@@ -1011,6 +1063,9 @@ func (r *AODVRouter) handleUREP(net mesh.INetwork, node mesh.INode, receivedPack
 	r.addSeenPacket(bh.PacketID)
 
 	if r.ownerID == uh.OriginNodeID {
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageDelivered,
+		})
 		// store in the GUT
 		r.addToGUT(uh.UREPUserID, uh.UREPDestNodeID)
 
@@ -1058,6 +1113,9 @@ func (r *AODVRouter) handleUERR(net mesh.INetwork, node mesh.INode, receivedPack
 	r.addSeenPacket(bh.PacketID)
 
 	if r.ownerID == uh.OriginNodeID {
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventMessageDelivered,
+		})
 		r.removeUserEntry(uh.UserID, uh.NodeID)
 		log.Printf("[UERR RECEIVED] Node %d received a uerr ", r.ownerID)
 		// should not remove route as a UERR is only tiggered
@@ -1275,4 +1333,4 @@ func (r *AODVRouter) addSeenPacket(packetID uint32) {
 	r.seenMu.Lock()
 	r.seenMsgIDs[packetID] = true
 	r.seenMu.Unlock()
-} 
+}
