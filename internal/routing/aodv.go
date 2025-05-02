@@ -743,6 +743,11 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
+	if r.seenMsgIDs[bh.PacketID] {
+		return
+	}
+	r.seenMsgIDs[bh.PacketID] = true
+
 	payloadString := string(payload)
 	// If I'm the final destination, do nothing -> the node can "deliver" it
 	if dh.FinalDestID == r.ownerID {
@@ -820,6 +825,11 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
+	if r.seenMsgIDs[bh.PacketID] {
+		return
+	}
+	r.seenMsgIDs[bh.PacketID] = true
+
 	payloadString := string(payload)
 	if umh.ToNodeID == r.ownerID {
 		// check that the user is at this node
@@ -887,11 +897,16 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 // Handle Data ACKs, should remove from pendingTxs
 func (r *AODVRouter) HandleDataAck(receivedPacket []byte) {
 	// Unpack the payload and remove from pendingTxs
-	_, ack, err := packet.DeserialiseACKPacket(receivedPacket)
+	bh, ack, err := packet.DeserialiseACKPacket(receivedPacket)
 
 	if err != nil {
 		return
 	}
+
+	if r.seenMsgIDs[bh.PacketID] {
+		return
+	}
+	r.seenMsgIDs[bh.PacketID] = true
 
 	// log.Printf("{ACK} Node %d: received ACK for msgID=%d\n", r.ownerID, ack.MsgID)
 
