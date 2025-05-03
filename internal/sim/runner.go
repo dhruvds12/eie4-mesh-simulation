@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"log"
 	"math"
 	"math/rand"
 	"sync"
@@ -49,6 +50,10 @@ func (r *Runner) Run() error {
 	// 	go func(nd mesh.INode) { defer r.wg.Done(); nd.Run(r.net) }(n)
 	// }
 
+	// ── metrics wire‑up ────────────────────────────────────────────────────
+	sub := r.bus.Subscribe()
+	go r.consumeEvents(sub)
+
 	// ── build nodes & users (grid) ──────────────────────────────
 	rows := int(math.Ceil(math.Sqrt(float64(r.sc.Nodes.Count))))
 	cols := rows
@@ -65,12 +70,16 @@ func (r *Runner) Run() error {
 				n.AddConnectedUser(uint32(rand.Int31()))
 			}
 			idx++
+			if d := r.sc.Nodes.JoinDelay; d > 0 {
+				time.Sleep(d)
+			}
 		}
 	}
 
-	// ── metrics wire‑up ────────────────────────────────────────────────────
-	sub := r.bus.Subscribe()
-	go r.consumeEvents(sub)
+	if d := r.sc.StartupDelay; d > 0 {
+		log.Printf("Startup delay: waiting %s before traffic…", d)
+		time.Sleep(d)
+	}
 
 	// ── traffic generator ─────────────────────────────────────────────────
 	λ := r.sc.Traffic.MsgPerNodePerMin / 60.0 // per‑sec rate per node
@@ -107,9 +116,9 @@ func (r *Runner) consumeEvents(ch chan eb.Event) {
 		case eb.EventMessageDelivered:
 			r.coll.AddDelivered(ev)
 		case eb.EventControlMessageSent:
-			r.coll.AddSent()
+			r.coll.AddControlSent()
 		case eb.EventControlMessageDelivered:
-			r.coll.AddDelivered(ev)
+			r.coll.AddControlDelivered(ev)
 		}
 	}
 }

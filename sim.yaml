@@ -1,18 +1,22 @@
 # Duration of the simulation
-duration: 90s
+duration: 0s
 
 # Random seed for deterministic runs
 seed: 12345
 
 # Square area side length in "units" (e.g. km)
-area_km2: 5.0
+area_km2: 3.0
 
 nodes:
-  count: 25             # number of virtual nodes in the mesh
+  count: 10             # number of virtual nodes in the mesh
   placement: uniform   # uniform | grid | hotspot -> only GRID is supported
+  join_delay: 3000ms    # delay between node joins
 
 users:
   per_node: 2          # attach 2 simulated users per node
+
+# Delay after all nodes have joined before starting traffic
+startup_delay: 30s
 
 traffic:
   pattern: poisson     # poisson | burst | custom

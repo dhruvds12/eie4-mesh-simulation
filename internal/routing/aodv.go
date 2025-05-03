@@ -1030,7 +1030,7 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 			Type: eventBus.EventControlMessageDelivered,
 		})
 		// reply with UREP along reverse path
-		log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount)
+		log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
 		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, 0)
 		// r.BroadcastMessageCSMA(net, node, reply, pid)
 		r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
@@ -1045,7 +1045,7 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	if err != nil {
 		return
 	}
-	log.Printf("[sim] [UREQ FORWARD] Node %d: forwarding UREQ for %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount)
+	log.Printf("[sim] [UREQ FORWARD] Node %d: forwarding UREQ for %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
 	// net.BroadcastMessage(fwdMsg, node)
 	// r.BroadcastMessageCSMA(net, node, fwdUREQ, packetId)
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: fwdUREQ, pktID: packetID}
