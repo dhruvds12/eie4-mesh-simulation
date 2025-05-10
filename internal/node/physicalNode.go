@@ -20,6 +20,10 @@ const (
 	ACTION_MESSAGE          uint8 = 0x01
 	ACTION_UPDATE_ROUTE     uint8 = 0x02
 	ACTION_INVALIDATE_ROUTE uint8 = 0x03
+	ADD_USER                uint8 = 0x04
+	REMOVE_USER             uint8 = 0x05
+	ADD_USER_ROUTE          uint8 = 0x06
+	REMOVE_USER_ROUTE       uint8 = 0x07
 )
 
 // NodeCommand represents a command sent from the hardware node.
@@ -31,6 +35,7 @@ type NodeCommand struct {
 	PacketID    uint32 `json:"packet_id,omitempty" msgpack:"packet_id,omitempty"`
 	Payload     []byte `json:"payload,omitempty" msgpack:"payload,omitempty"`
 	PayloadLen  uint32 `json:"payload_len,omitempty" msgpack:"payload_len,omitempty"`
+	UserId      uint32 `json:"user_id,omitempty" msgpack:"user_id,omitempty"`
 }
 
 // physicalNode is a concrete implementation of INode for physical nodes.
@@ -137,12 +142,18 @@ func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string
 // send user message
 func (p *physicalNode) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string) {
 	p.router.SendUserMessage(net, p, userID, destUserID, payload)
+
+	// Publish to mqtt and tell the node to send a message to the user.
+
 }
 
 // SendBroadcastInfo sends a HELLO broadcast from this physical node.
 func (p *physicalNode) SendBroadcastInfo(net mesh.INetwork) {
-	p.router.SendBroadcastInfo(net, p)
+	// p.router.SendBroadcastInfo(net, p)
 	// need to send a message to a physical node
+	// p.router.SendDiffBroadcastInfo(net, p)
+
+	// Do nothing ===> physical node will handle this behaviour itself
 }
 
 // HandleMessage processes an incoming message.
@@ -285,7 +296,31 @@ func (p *physicalNode) handleMQTTCommand(client mqtt.Client, msg mqtt.Message) {
 			p.id, cmd.PacketID, cmd.PayloadLen)
 		// Dispatch the message
 		p.router.BroadcastMessageCSMA(p.net, p, cmd.Payload, cmd.PacketID)
+	case ADD_USER:
+		// Add user to connected users table - need to first disect the message
+		p.AddConnectedUser(cmd.UserId)
 
+		// This needs to be sent to the front end
+		p.eventBus.Publish(eventBus.Event{
+			Type:   eventBus.EventCreateUser,
+			NodeID: p.id,
+			UserID: cmd.UserId,
+		})
+
+	case REMOVE_USER:
+		// Remove user from connected users table
+		p.RemoveConnectedUser(cmd.UserId)
+		p.eventBus.Publish(eventBus.Event{
+			Type:   eventBus.EventDeleteUser,
+			NodeID: p.id,
+			UserID: cmd.UserId,
+		})
+
+	case ADD_USER_ROUTE:
+		// Update GUT
+
+	case REMOVE_USER_ROUTE:
+		// Remove from GUT
 	default:
 		log.Printf("Physical Node %d: unknown command action: %d", p.id, cmd.Action)
 	}

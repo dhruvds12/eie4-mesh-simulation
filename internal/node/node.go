@@ -94,7 +94,7 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 
 // SendData is a convenience method calling into the router
 func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
-	n.router.SendDataCSMA(net, n, destID, payload)
+	n.router.SendData(net, n, destID, payload)
 }
 
 // send user message

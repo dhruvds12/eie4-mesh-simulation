@@ -1,0 +1,33 @@
+# Duration of the simulation
+duration: 0s
+
+# Random seed for deterministic runs
+seed: 12345
+
+# Square area side length in "units" (e.g. km)
+area_km2: 3.0
+
+nodes:
+  count: 10             # number of virtual nodes in the mesh
+  placement: uniform   # uniform | grid | hotspot -> only GRID is supported
+  join_delay: 3000ms    # delay between node joins
+
+users:
+  per_node: 2          # attach 2 simulated users per node
+
+# Delay after all nodes have joined before starting traffic
+startup_delay: 30s
+
+traffic:
+  pattern: poisson     # poisson | burst | custom
+  msg_per_node_per_min: 20
+  packet_mix:
+    DATA:      0.5
+    USER_MSG:  0.5
+    BROADCAST: 0
+
+routing:
+  max_hops: 5          # override packet.MAX_HOPS
+
+logging:
+  metrics_file: "logs/metrics_{{timestamp}}.json"
