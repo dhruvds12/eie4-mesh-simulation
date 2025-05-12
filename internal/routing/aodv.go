@@ -77,6 +77,14 @@ type AODVRouter struct {
 	gutMu            sync.RWMutex
 	lastUsersShadow  map[uint32]bool
 	txQueue          chan outgoingTx
+
+	CcaWindow      time.Duration
+	CcaSample      time.Duration
+	InitialBackoff time.Duration
+	MaxBackoff     time.Duration
+	BackoffScheme  string
+	BeUnit         time.Duration
+	BeMaxExp       int
 }
 
 // NewAODVRouter constructs a router for a specific node
@@ -93,6 +101,15 @@ func NewAODVRouter(ownerID uint32, bus *eventBus.EventBus) *AODVRouter {
 		userMessageQueue: make(map[uint32][]userMessageQueueEntry),
 		lastUsersShadow:  make(map[uint32]bool),
 		txQueue:          make(chan outgoingTx, 32),
+
+		// MAC defaults (will be overwritten by Runner after node creation)
+		CcaWindow:      5 * time.Millisecond,
+		CcaSample:      100 * time.Microsecond,
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     2 * time.Second,
+		BackoffScheme:  "binary",
+		BeUnit:         20 * time.Millisecond,
+		BeMaxExp:       5,
 	}
 	go r.txWorker()
 	return r
@@ -168,7 +185,7 @@ func (r *AODVRouter) StartBroadcastTicker(net mesh.INetwork, node mesh.INode) {
 // Stop the pendingTxChecker
 func (r *AODVRouter) StopPendingTxChecker() {
 	close(r.quitChan)
-	close(r.txQueue)
+	// close(r.txQueue)
 }
 
 // -- IRouter methods --

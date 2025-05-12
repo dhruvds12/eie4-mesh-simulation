@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
@@ -355,4 +356,29 @@ func (p *physicalNode) HasConnectedUser(userID uint32) bool {
 	p.muUsers.RLock()
 	defer p.muUsers.RUnlock()
 	return p.connectedUsers[userID]
+}
+
+func (p *physicalNode) GetRouter() routing.IRouter {
+	return p.router
+}
+
+func (p *physicalNode) SetRouter(r routing.IRouter) {
+	p.router = r
+}
+
+func (p *physicalNode) SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxBackoff time.Duration, BackoffScheme string, BEUnit time.Duration, BEMaxExp int) bool {
+
+	if aodv, ok := p.GetRouter().(*routing.AODVRouter); ok {
+		aodv.CcaWindow = CCAWindow
+		aodv.CcaSample = CCASample
+		aodv.InitialBackoff = InitialBackoff
+		aodv.MaxBackoff = MaxBackoff
+		aodv.BackoffScheme = BackoffScheme
+		aodv.BeUnit = BEUnit
+		aodv.BeMaxExp = BEMaxExp
+		return ok
+	}
+
+	return false
+
 }

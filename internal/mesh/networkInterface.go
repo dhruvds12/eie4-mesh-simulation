@@ -9,4 +9,5 @@ type INetwork interface {
 	IsChannelFree(node INode) bool
 	LeaveAll()
 	GetNode(nodeId uint32) (INode, error)
+	ActiveTransmissions() int
 }

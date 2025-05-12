@@ -330,3 +330,16 @@ func (net *NetworkImpl) GetNode(nodeId uint32) (mesh.INode, error) {
 	}
 	return nil, fmt.Errorf("node with id %d not found", nodeId)
 }
+
+func (net *NetworkImpl) ActiveTransmissions() int {
+    net.mu.RLock()
+    defer net.mu.RUnlock()
+    list := make([]*Transmission, 0, len(net.transmissions))
+    for _, t := range net.transmissions {
+        if t.Active {
+            list = append(list, t)
+        }
+    }
+    return len(list)
+}
+

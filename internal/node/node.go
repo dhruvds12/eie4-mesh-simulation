@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"time"
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
@@ -61,8 +62,8 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 
 	if aodv, ok := n.router.(*routing.AODVRouter); ok {
 		aodv.StartPendingTxChecker(net, n)
-		aodv.StartBroadcastTicker(net, n) 
-		
+		aodv.StartBroadcastTicker(net, n)
+
 		aodv.SendDiffBroadcastInfo(net, n)
 	}
 
@@ -90,7 +91,6 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 // 	}
 // 	net.UnicastMessage(m, n)
 // }
-
 
 // SendData is a convenience method calling into the router
 func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
@@ -123,7 +123,7 @@ func (n *nodeImpl) SendBroadcastInfo(net mesh.INetwork) {
 	// }
 	// net.BroadcastMessage(m, n)
 	// n.router.SendBroadcastInfo(net, n)
-	n.router.SendDiffBroadcastInfo(net, n);
+	n.router.SendDiffBroadcastInfo(net, n)
 }
 
 // HandleMessage processes an incoming message.
@@ -264,4 +264,21 @@ func (n *nodeImpl) HasConnectedUser(userID uint32) bool {
 	n.muUsers.RLock()
 	defer n.muUsers.RUnlock()
 	return n.connectedUsers[userID]
+}
+
+func (n *nodeImpl) SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxBackoff time.Duration, BackoffScheme string, BEUnit time.Duration, BEMaxExp int) bool {
+
+	if aodv, ok := n.GetRouter().(*routing.AODVRouter); ok {
+		aodv.CcaWindow = CCAWindow
+		aodv.CcaSample = CCASample
+		aodv.InitialBackoff = InitialBackoff
+		aodv.MaxBackoff = MaxBackoff
+		aodv.BackoffScheme = BackoffScheme
+		aodv.BeUnit = BEUnit
+		aodv.BeMaxExp = BEMaxExp
+		return ok
+	}
+
+	return false
+
 }

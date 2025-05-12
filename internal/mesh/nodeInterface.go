@@ -1,6 +1,8 @@
 package mesh
 
-
+import (
+	"time"
+)
 
 type INode interface {
 	GetID() uint32
@@ -24,4 +26,6 @@ type INode interface {
 	RemoveConnectedUser(userID uint32)
 
 	SendUserMessage(net INetwork, userID, destUserID uint32, payload string)
+
+	SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxBackoff time.Duration, BackoffScheme string, BEUnit time.Duration, BEMaxExp int) bool
 }

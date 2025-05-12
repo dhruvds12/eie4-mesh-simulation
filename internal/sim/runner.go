@@ -65,6 +65,18 @@ func (r *Runner) Run() error {
 			lat := float64(rRow) * side / float64(rows-1)
 			lng := float64(cCol) * side / float64(cols-1)
 			n := node.NewNode(lat, lng, r.bus)
+
+			if ok := n.SetRouterConstants(
+				r.sc.CSMA.CCAWindow,
+				r.sc.CSMA.CCASample,
+				r.sc.CSMA.InitialBackoff,
+				r.sc.CSMA.MaxBackoff,
+				r.sc.CSMA.BackoffScheme,
+				r.sc.CSMA.BEUnit,
+				r.sc.CSMA.BEMaxExp,
+			); !ok {
+				log.Println("Failed to add the CSMA configuration!")
+			}
 			r.net.Join(n)
 			for u := 0; u < r.sc.Users.PerNode; u++ {
 				n.AddConnectedUser(uint32(rand.Int31()))
@@ -95,6 +107,19 @@ func (r *Runner) Run() error {
 	for {
 		select {
 		case <-done:
+			tick.Stop() // stop creating new traffic
+
+			if r.sc.EndMode == "drain" {
+				deadline := time.Now().Add(r.sc.DrainTimeout)
+				for time.Now().Before(deadline) {
+					if r.net.(*network.NetworkImpl).ActiveTransmissions() == 0 {
+						time.Sleep(30 * time.Millisecond)
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+			log.Printf("Remaining active transmissions on close: %d", r.net.(*network.NetworkImpl).ActiveTransmissions())
 			close(r.quit)
 			if leaver, ok := r.net.(interface{ LeaveAll() }); ok {
 				leaver.LeaveAll()

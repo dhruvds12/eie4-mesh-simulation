@@ -32,6 +32,16 @@ type LogCfg struct {
 	MetricsFile string `yaml:"metrics_file" json:"metrics_file"`
 }
 
+type CSMAcfg struct {
+	CCAWindow      time.Duration `yaml:"cca_window" json:"cca_window"`
+	CCASample      time.Duration `yaml:"cca_sample" json:"cca_sample"`
+	InitialBackoff time.Duration `yaml:"initial_backoff" json:"initial_backoff"`
+	MaxBackoff     time.Duration `yaml:"max_backoff" json:"max_backoff"`
+	BackoffScheme  string        `yaml:"backoff_scheme" json:"backoff_scheme"` // binary | be
+	BEUnit         time.Duration `yaml:"be_unit" json:"be_unit"`
+	BEMaxExp       int           `yaml:"be_max_exp" json:"be_max_exp"`
+}
+
 type Scenario struct {
 	Duration     time.Duration `yaml:"duration" json:"duration"`
 	Seed         int64         `yaml:"seed" json:"seed"`
@@ -41,6 +51,9 @@ type Scenario struct {
 	StartupDelay time.Duration `yaml:"startup_delay" json:"startup_delay"`
 	Traffic      TrafficCfg    `yaml:"traffic" json:"traffic"`
 	Routing      RoutingCfg    `yaml:"routing" json:"routing"`
+	CSMA         CSMAcfg       `yaml:"csma"   json:"csma"`
+	EndMode      string        `yaml:"end_mode" json:"end_mode"`
+	DrainTimeout time.Duration `yaml:"drain_timeout" json:"drain_timeout"`
 	Logging      LogCfg        `yaml:"logging" json:"logging"`
 }
 
@@ -57,5 +70,32 @@ func LoadScenario(path string) (*Scenario, error) {
 	if err := json.Unmarshal(f, sc); err != nil {
 		return nil, err
 	}
+
+	// defaults:
+	if sc.CSMA.CCAWindow == 0 {
+		sc.CSMA.CCAWindow = 5 * time.Millisecond
+	}
+	if sc.CSMA.CCASample == 0 {
+		sc.CSMA.CCASample = 100 * time.Microsecond
+	}
+	if sc.CSMA.InitialBackoff == 0 {
+		sc.CSMA.InitialBackoff = 100 * time.Millisecond
+	}
+	if sc.CSMA.MaxBackoff == 0 {
+		sc.CSMA.MaxBackoff = 2 * time.Second
+	}
+	if sc.CSMA.BackoffScheme == "" {
+		sc.CSMA.BackoffScheme = "binary"
+	}
+	if sc.CSMA.BEUnit == 0 {
+		sc.CSMA.BEUnit = 20 * time.Millisecond
+	}
+	if sc.CSMA.BEMaxExp == 0 {
+		sc.CSMA.BEMaxExp = 5
+	}
+	if sc.EndMode == "" {
+		sc.EndMode = "immediate"
+	}
+
 	return sc, nil
 }

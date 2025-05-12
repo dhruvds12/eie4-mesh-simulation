@@ -1,33 +1,45 @@
-# Duration of the simulation
-duration: 0s
+# ────────────── simulation timing ──────────────
+duration: 90s           # time we KEEP GENERATING traffic
+end_mode: drain         # immediate | drain
+drain_timeout: 60s      # max extra wall-clock time we allow when end_mode = drain
 
-# Random seed for deterministic runs
+# ────────────── randomness ─────────────────────
 seed: 12345
 
-# Square area side length in "units" (e.g. km)
+# ────────────── playground ─────────────────────
 area_km2: 3.0
 
 nodes:
-  count: 10             # number of virtual nodes in the mesh
-  placement: uniform   # uniform | grid | hotspot -> only GRID is supported
-  join_delay: 3000ms    # delay between node joins
+  count: 10
+  placement: grid        # uniform | grid | hotspot   (only grid implemented)
+  join_delay: 3000ms
 
 users:
-  per_node: 2          # attach 2 simulated users per node
+  per_node: 2
 
-# Delay after all nodes have joined before starting traffic
 startup_delay: 30s
 
+# ────────────── traffic model ──────────────────
 traffic:
-  pattern: poisson     # poisson | burst | custom
+  pattern: poisson
   msg_per_node_per_min: 20
   packet_mix:
     DATA:      0.5
     USER_MSG:  0.5
-    BROADCAST: 0
+    BROADCAST: 0.0
 
+# ────────────── routing / MAC knobs ────────────
 routing:
-  max_hops: 5          # override packet.MAX_HOPS
+  max_hops: 5
+
+csma:
+  cca_window:      5ms      # how long we must sense idle
+  cca_sample:      100µs    # sampling granularity inside that window
+  initial_backoff: 500ms
+  max_backoff:     5s
+  backoff_scheme:  binary   # binary | be
+  be_unit:         20ms     # only used when backoff_scheme = be
+  be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: "logs/metrics_{{timestamp}}.json"
+  metrics_file: logs/metrics_{{timestamp}}.json
