@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -474,24 +473,6 @@ func (r *AODVRouter) RemoveRouteEntry(dest uint32) {
 
 }
 
-// Check that channel is free before sending data to the network
-// Will call the broadcast function in the network to send the message to all nodes
-func (r *AODVRouter) BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, sendPacket []byte, packetID uint32) {
-	backoff := 100 * time.Millisecond
-	// Check if the channel is busy
-	for !net.IsChannelFree(sender) {
-		waitTime := time.Duration(1+rand.Intn(int(backoff/time.Millisecond))) * time.Millisecond
-		log.Printf("[CSMA] Node %d: Channel busy. Waiting for %v before retrying.\n", r.ownerID, waitTime)
-		time.Sleep(waitTime)
-		backoff *= 2
-		if backoff > 2*time.Second {
-			backoff = 2 * time.Second
-		}
-	}
-	log.Printf("[CSMA] Node %d: Channel is free. Broadcasting message.\n", r.ownerID)
-	net.BroadcastMessage(sendPacket, sender, packetID)
-}
-
 // -- Private AODV logic --
 // handleBroadcastInfo processes a HELLO broadcast message.
 func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, buf []byte) {
@@ -508,7 +489,7 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, buf
 	r.addSeenPacket(bh.PacketID)
 
 	r.eventBus.Publish(eventBus.Event{
-		Type:        eventBus.EventControlMessageDelivered,
+		Type: eventBus.EventControlMessageDelivered,
 	})
 
 	var dh packet.DiffBroadcastInfoHeader
