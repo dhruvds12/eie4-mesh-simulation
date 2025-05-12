@@ -22,7 +22,7 @@ startup_delay: 30s
 # ────────────── traffic model ──────────────────
 traffic:
   pattern: poisson
-  msg_per_node_per_min: 20
+  msg_per_node_per_min: 10
   packet_mix:
     DATA:      0.5
     USER_MSG:  0.5

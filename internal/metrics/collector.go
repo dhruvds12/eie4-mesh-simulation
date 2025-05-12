@@ -17,6 +17,7 @@ type Counters struct {
 	CollByType            map[uint8]uint64 `json:"collisions_by_type"`
 	HopSum                uint64           `json:"hop_sum"`
 	HopCount              uint64           `json:"hop_samples"`
+	LostMessages         uint64           `json:"total_lost"`
 }
 
 type Collector struct {
@@ -67,6 +68,12 @@ func (c *Collector) AddControlDelivered(ev eb.Event) {
 	//     c.HopSum += uint64(ev.OtherNodeID)
 	//     c.HopCount++
 	// }
+	c.mu.Unlock()
+}
+
+func (c *Collector) AddLostMessage(ev eb.Event) {
+	c.mu.Lock()
+	c.LostMessages++
 	c.mu.Unlock()
 }
 

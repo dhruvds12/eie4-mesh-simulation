@@ -728,6 +728,11 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 
 	if r.ownerID == rerrHeader.SenderNodeID {
+		// TODO IS THIS DOUBLE COUNTED <----------------------------------------------------------------------
+		r.eventBus.Publish(eventBus.Event{
+			Type:     eventBus.EventLostMessage,
+			NodeID:   r.ownerID,
+		})
 		log.Printf("{RERR} Node %d: received RERR for my own message, stopping here.\n", r.ownerID)
 		return
 	}
@@ -806,6 +811,10 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	dest := dh.FinalDestID
 	route, ok := r.getRoute(dest)
 	if !ok {
+		r.eventBus.Publish(eventBus.Event{
+			Type:     eventBus.EventLostMessage,
+			NodeID:   r.ownerID,
+		})
 		// This is in theory an unlikely case because the origin node should have initiated RREQ
 		// No route, we might trigger route discovery or drop
 		log.Printf("[sim] Node %d: no route to forward DATA destined for %d.\n", r.ownerID, dest)
@@ -897,6 +906,10 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	dest := umh.ToNodeID
 	route, ok := r.getRoute(dest)
 	if !ok {
+		r.eventBus.Publish(eventBus.Event{
+			Type:     eventBus.EventLostMessage,
+			NodeID:   r.ownerID,
+		})
 		// This is in theory an unlikely case because the origin node should have initiated RREQ
 		// No route, we might trigger route discovery or drop
 		log.Printf("[sim] Node %d: no route to forward USER MESSAGE destined for %d.\n", r.ownerID, dest)
@@ -987,9 +1000,9 @@ func (r *AODVRouter) initiateUERR(net mesh.INetwork, sender mesh.INode, destNode
 	// net.BroadcastMessage(rreqMsg, sender)
 	// r.BroadcastMessageCSMA(net, sender, rreqPacket, packetID)
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: uerrPacket, pktID: packetID}
-	r.eventBus.Publish(eventBus.Event{
-		Type: eventBus.EventMessageSent,
-	})
+	// r.eventBus.Publish(eventBus.Event{
+	// 	Type: eventBus.EventMessageSent,
+	// })
 }
 
 func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPacket []byte) {
@@ -1111,8 +1124,14 @@ func (r *AODVRouter) handleUERR(net mesh.INetwork, node mesh.INode, receivedPack
 	r.addSeenPacket(bh.PacketID)
 
 	if r.ownerID == uh.OriginNodeID {
+		// r.eventBus.Publish(eventBus.Event{
+		// 	Type: eventBus.EventMessageDelivered,
+		// })
+
+		// TODO IS THIS DOUBLE COUNTED <--------------------------------------------------------------
 		r.eventBus.Publish(eventBus.Event{
-			Type: eventBus.EventMessageDelivered,
+			Type:     eventBus.EventLostMessage,
+			NodeID:   r.ownerID,
 		})
 		r.removeUserEntry(uh.UserID, uh.NodeID)
 		log.Printf("[UERR RECEIVED] Node %d received a uerr ", r.ownerID)

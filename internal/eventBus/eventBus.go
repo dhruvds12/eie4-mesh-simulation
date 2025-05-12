@@ -21,6 +21,7 @@ const (
 	EventUserMessage             EventType = "USER_MESSAGE"
 	EventControlMessageDelivered EventType = "CONTROL_MESSAGE_DELIVERED"
 	EventControlMessageSent      EventType = "CONTROL_MESSAGE_SENT"
+	EventLostMessage             EventType = "LOST_MESSAGE"
 )
 
 // RouteEntry represents an entry in the routing table.

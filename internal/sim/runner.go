@@ -144,6 +144,8 @@ func (r *Runner) consumeEvents(ch chan eb.Event) {
 			r.coll.AddControlSent()
 		case eb.EventControlMessageDelivered:
 			r.coll.AddControlDelivered(ev)
+		case eb.EventLostMessage:
+			r.coll.AddLostMessage(ev)
 		}
 	}
 }
