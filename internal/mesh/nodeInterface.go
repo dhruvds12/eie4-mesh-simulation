@@ -28,4 +28,6 @@ type INode interface {
 	SendUserMessage(net INetwork, userID, destUserID uint32, payload string)
 
 	SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxBackoff time.Duration, BackoffScheme string, BEUnit time.Duration, BEMaxExp int) bool
+
+	GetRandomKnownNode() (uint32, bool)
 }

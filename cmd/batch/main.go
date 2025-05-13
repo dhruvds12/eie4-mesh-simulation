@@ -33,7 +33,8 @@ func main() {
 	log.SetOutput(multiWriter)
 
 	// log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.SetFlags(0)
+	// include date, time (hh:mm:ss) and microsecond precision
+	log.SetFlags(log.Ltime | log.Lmicroseconds)
 
 	// Log start of simulation
 	log.Println("Starting simulation...")

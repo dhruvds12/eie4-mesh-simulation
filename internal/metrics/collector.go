@@ -9,15 +9,21 @@ import (
 )
 
 type Counters struct {
-	TotalSent             uint64           `json:"total_sent"`
-	TotalControlSent      uint64           `json:"total_control_sent"`
-	TotalDelivered        uint64           `json:"total_delivered"`
-	TotalControlDelivered uint64           `json:"total_control_delivered"`
-	Collisions            uint64           `json:"collisions"`
-	CollByType            map[uint8]uint64 `json:"collisions_by_type"`
-	HopSum                uint64           `json:"hop_sum"`
-	HopCount              uint64           `json:"hop_samples"`
-	LostMessages         uint64           `json:"total_lost"`
+	TotalSent              uint64           `json:"total_sent"`
+	TotalSentByType        map[uint8]uint64 `json:"sent_by_type"`
+	TotalControlSent       uint64           `json:"total_control_sent"`
+	TotalControlSentByType map[uint8]uint64 `json:"control_sent_by_type"`
+	TotalDelivered         uint64           `json:"total_delivered"`
+	TotalDeliveredByType   map[uint8]uint64 `json:"delivered_by_type"`
+	TotalControlDelivered  uint64           `json:"total_control_delivered"`
+	Collisions             uint64           `json:"collisions"`
+	CollByType             map[uint8]uint64 `json:"collisions_by_type"`
+	HopSum                 uint64           `json:"hop_sum"`
+	HopCount               uint64           `json:"hop_samples"`
+	LostMessages           uint64           `json:"total_lost"`
+	NoRoute                uint64           `json:"no_route"`
+	NoRouteUser            uint64           `json:"no_route_user"`
+	UserNotAtNode          uint64           `json:"user_not_at_node"`
 }
 
 type Collector struct {
@@ -26,7 +32,7 @@ type Collector struct {
 }
 
 func NewCollector() *Collector {
-	return &Collector{Counters: Counters{CollByType: make(map[uint8]uint64)}}
+	return &Collector{Counters: Counters{TotalSentByType: make(map[uint8]uint64), TotalDeliveredByType: make(map[uint8]uint64), TotalControlSentByType: make(map[uint8]uint64), CollByType: make(map[uint8]uint64)}}
 }
 
 func (c *Collector) AddCollision(pktType uint8) {
@@ -39,21 +45,24 @@ func (c *Collector) AddCollision(pktType uint8) {
 	c.CollByType[pktType]++
 }
 
-func (c *Collector) AddSent() {
+func (c *Collector) AddSent(ev eb.Event) {
 	c.mu.Lock()
 	c.TotalSent++
+	c.TotalSentByType[ev.PacketType]++
 	c.mu.Unlock()
 }
 
-func (c *Collector) AddControlSent() {
+func (c *Collector) AddControlSent(ev eb.Event) {
 	c.mu.Lock()
 	c.TotalControlSent++
+	c.TotalControlSentByType[ev.PacketType]++
 	c.mu.Unlock()
 }
 
 func (c *Collector) AddDelivered(ev eb.Event) {
 	c.mu.Lock()
 	c.TotalDelivered++
+	c.TotalDeliveredByType[ev.PacketType]++
 	if ev.OtherNodeID != 0 {
 		c.HopSum += uint64(ev.OtherNodeID)
 		c.HopCount++
@@ -71,9 +80,27 @@ func (c *Collector) AddControlDelivered(ev eb.Event) {
 	c.mu.Unlock()
 }
 
-func (c *Collector) AddLostMessage(ev eb.Event) {
+func (c *Collector) AddLostMessage() {
 	c.mu.Lock()
 	c.LostMessages++
+	c.mu.Unlock()
+}
+
+func (c *Collector) AddNoRoute() {
+	c.mu.Lock()
+	c.NoRoute++
+	c.mu.Unlock()
+}
+
+func (c *Collector) AddNoRouteUser() {
+	c.mu.Lock()
+	c.NoRouteUser++
+	c.mu.Unlock()
+}
+
+func (c *Collector) AddUserNotAtNode() {
+	c.mu.Lock()
+	c.UserNotAtNode++
 	c.mu.Unlock()
 }
 

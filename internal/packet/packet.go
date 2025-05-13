@@ -8,17 +8,17 @@ import (
 
 // Packet Types
 const (
-	PKT_RREQ           uint8 = 0x01
-	PKT_RREP           uint8 = 0x02
-	PKT_RERR           uint8 = 0x03
-	PKT_DATA           uint8 = 0x04
-	PKT_BROADCAST      uint8 = 0x05
-	PKT_BROADCAST_INFO uint8 = 0x06
-	PKT_ACK            uint8 = 0x07
-	PKT_UREQ           uint8 = 0x0F // user lookup request
-	PKT_UREP           uint8 = 0x10 // user lookup reply
-	PKT_UERR          uint8 = 0x11 // user lookup error
-	PKT_USER_MSG       uint8 = 0x12 // user lookup error
+	PKT_RREQ           uint8 = 0x01 //1
+	PKT_RREP           uint8 = 0x02 //2
+	PKT_RERR           uint8 = 0x03 //3
+	PKT_DATA           uint8 = 0x04 //4
+	PKT_BROADCAST      uint8 = 0x05 //5
+	PKT_BROADCAST_INFO uint8 = 0x06 //6
+	PKT_ACK            uint8 = 0x07 //7
+	PKT_UREQ           uint8 = 0x0F //15 // user lookup request
+	PKT_UREP           uint8 = 0x10 //16 // user lookup reply
+	PKT_UERR           uint8 = 0x11 //17 // user lookup error
+	PKT_USER_MSG       uint8 = 0x12 //18 // user lookup error
 )
 
 const MaxPacketSize = 255
@@ -86,9 +86,9 @@ type UREPHeader struct {
 
 // Different to RERR used when the node was found but the user was not at the node
 type UERRHeader struct {
-	UserID       uint32 // id of user that is not found
-	NodeID       uint32 // id of node that we thought the user was at
-	OriginNodeID       uint32
+	UserID           uint32 // id of user that is not found
+	NodeID           uint32 // id of node that we thought the user was at
+	OriginNodeID     uint32
 	OriginalPacketID uint32
 }
 
@@ -791,9 +791,9 @@ func CreateUERRPacket(
 		Reserved:   0,
 	}
 	h := UERRHeader{
-		UserID:       uerrUserID,
-		NodeID:       uerrNodeID,
-		OriginNodeID:       originNodeID,
+		UserID:           uerrUserID,
+		NodeID:           uerrNodeID,
+		OriginNodeID:     originNodeID,
 		OriginalPacketID: originalPacketID,
 	}
 
@@ -838,9 +838,9 @@ func DeserialiseUERRPacket(
 	}
 	ofs := 16
 	h := UERRHeader{
-		UserID:       binary.LittleEndian.Uint32(buf[ofs+0 : ofs+4]),
-		NodeID:       binary.LittleEndian.Uint32(buf[ofs+4 : ofs+8]),
-		OriginNodeID:       binary.LittleEndian.Uint32(buf[ofs+8 : ofs+12]),
+		UserID:           binary.LittleEndian.Uint32(buf[ofs+0 : ofs+4]),
+		NodeID:           binary.LittleEndian.Uint32(buf[ofs+4 : ofs+8]),
+		OriginNodeID:     binary.LittleEndian.Uint32(buf[ofs+8 : ofs+12]),
 		OriginalPacketID: binary.LittleEndian.Uint32(buf[ofs+12 : ofs+16]),
 	}
 	return bh, h, nil

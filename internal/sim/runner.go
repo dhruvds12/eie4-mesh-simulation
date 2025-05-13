@@ -112,10 +112,10 @@ func (r *Runner) Run() error {
 			if r.sc.EndMode == "drain" {
 				deadline := time.Now().Add(r.sc.DrainTimeout)
 				for time.Now().Before(deadline) {
-					if r.net.(*network.NetworkImpl).ActiveTransmissions() == 0 {
-						time.Sleep(30 * time.Millisecond)
-						break
-					}
+					// if r.net.(*network.NetworkImpl).ActiveTransmissions() == 0 {
+					// 	time.Sleep(30 * time.Millisecond)
+					// 	break
+					// }
 					time.Sleep(10 * time.Millisecond)
 				}
 			}
@@ -137,15 +137,21 @@ func (r *Runner) consumeEvents(ch chan eb.Event) {
 	for ev := range ch {
 		switch ev.Type {
 		case eb.EventMessageSent:
-			r.coll.AddSent()
+			r.coll.AddSent(ev)
 		case eb.EventMessageDelivered:
 			r.coll.AddDelivered(ev)
 		case eb.EventControlMessageSent:
-			r.coll.AddControlSent()
+			r.coll.AddControlSent(ev)
 		case eb.EventControlMessageDelivered:
 			r.coll.AddControlDelivered(ev)
 		case eb.EventLostMessage:
-			r.coll.AddLostMessage(ev)
+			r.coll.AddLostMessage()
+		case eb.EventNoRoute:
+			r.coll.AddNoRoute()
+		case eb.EventNoRouteUser:
+			r.coll.AddNoRouteUser()
+		case eb.EventUserNotAtNode:
+			r.coll.AddUserNotAtNode()
 		}
 	}
 }
@@ -161,9 +167,22 @@ func (r *Runner) emitRandomTraffic() {
 	}
 
 	from := keys[rand.Intn(len(keys))]
-	to := keys[rand.Intn(len(keys))]
-	if from.GetID() == to.GetID() {
-		return
+
+	var to mesh.INode
+	if r.sc.Traffic.RestrictToKnownRoutes {
+		if id, ok := from.GetRandomKnownNode(); ok {
+			if nd, err := r.net.(*network.NetworkImpl).GetNode(id); err == nil {
+				to = nd
+			}
+		}
+		if to == nil {
+			return
+		} // no known destinations yet
+	} else {
+		to = keys[rand.Intn(len(keys))]
+		if from.GetID() == to.GetID() {
+			return
+		}
 	}
 
 	// pick packet type according to mix

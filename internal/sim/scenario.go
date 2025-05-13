@@ -19,9 +19,10 @@ type UserCfg struct {
 }
 
 type TrafficCfg struct {
-	Pattern          string             `yaml:"pattern" json:"pattern"`
-	MsgPerNodePerMin float64            `yaml:"msg_per_node_per_min" json:"msg_per_node_per_min"`
-	PacketMix        map[string]float64 `yaml:"packet_mix" json:"packet_mix"`
+	Pattern               string             `yaml:"pattern" json:"pattern"`
+	MsgPerNodePerMin      float64            `yaml:"msg_per_node_per_min" json:"msg_per_node_per_min"`
+	RestrictToKnownRoutes bool               `yaml:"restrict_to_known_routes" json:"restrict_to_known_routes"`
+	PacketMix             map[string]float64 `yaml:"packet_mix" json:"packet_mix"`
 }
 
 type RoutingCfg struct {

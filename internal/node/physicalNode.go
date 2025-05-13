@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -381,4 +382,27 @@ func (p *physicalNode) SetRouterConstants(CCAWindow, CCASample, InitialBackoff, 
 
 	return false
 
+}
+
+func (p *physicalNode) GetRandomKnownNode() (uint32, bool) {
+	aodv, ok := p.router.(*routing.AODVRouter)
+	if !ok {
+		return 0, false
+	}
+	aodv.RouteMu.RLock()
+	defer aodv.RouteMu.RUnlock()
+
+	if len(aodv.RouteTable) == 0 {
+		return 0, false
+	}
+	keys := make([]uint32, 0, len(aodv.RouteTable))
+	for id := range aodv.RouteTable {
+		if id != p.id { // never pick myself
+			keys = append(keys, id)
+		}
+	}
+	if len(keys) == 0 {
+		return 0, false
+	}
+	return keys[rand.Intn(len(keys))], true
 }
