@@ -29,6 +29,11 @@ type IRouter interface {
 	// Stop the router's Tx check go routine
 	StopPendingTxChecker()
 
+	// Stop the router's Broadcast ticker go routine
+	StopBroadcastTicker()
+
+	StopTxWorker()
+
 	// Add item to routing table
 	AddRouteEntry(dest, nextHop uint32, hopCount int)
 

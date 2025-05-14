@@ -74,6 +74,8 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 		case <-n.quit:
 			if aodv, ok := n.router.(*routing.AODVRouter); ok {
 				aodv.StopPendingTxChecker()
+				aodv.StopBroadcastTicker()
+				aodv.StopTxWorker()
 			}
 			return
 		}
@@ -285,23 +287,23 @@ func (n *nodeImpl) SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxB
 
 func (n *nodeImpl) GetRandomKnownNode() (uint32, bool) {
 	aodv, ok := n.router.(*routing.AODVRouter)
-    if !ok {
-        return 0, false
-    }
-    aodv.RouteMu.RLock()
-    defer aodv.RouteMu.RUnlock()
+	if !ok {
+		return 0, false
+	}
+	aodv.RouteMu.RLock()
+	defer aodv.RouteMu.RUnlock()
 
-    if len(aodv.RouteTable) == 0 {
-        return 0, false
-    }
-    keys := make([]uint32, 0, len(aodv.RouteTable))
-    for id := range aodv.RouteTable {
-        if id != n.id {            // never pick myself
-            keys = append(keys, id)
-        }
-    }
-    if len(keys) == 0 {
-        return 0, false
-    }
-    return keys[rand.Intn(len(keys))], true
+	if len(aodv.RouteTable) == 0 {
+		return 0, false
+	}
+	keys := make([]uint32, 0, len(aodv.RouteTable))
+	for id := range aodv.RouteTable {
+		if id != n.id { // never pick myself
+			keys = append(keys, id)
+		}
+	}
+	if len(keys) == 0 {
+		return 0, false
+	}
+	return keys[rand.Intn(len(keys))], true
 }
