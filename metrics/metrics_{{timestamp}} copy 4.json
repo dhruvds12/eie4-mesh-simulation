@@ -1,0 +1,23 @@
+{
+  "total_sent": 60,
+  "total_control_sent": 54,
+  "control_sent_by_type": {
+    "15": 19,
+    "16": 25,
+    "6": 10
+  },
+  "total_delivered": 46,
+  "total_control_delivered": 98,
+  "collisions": 15,
+  "collisions_by_type": {
+    "15": 5,
+    "16": 3,
+    "6": 7
+  },
+  "hop_sum": 52845693303,
+  "hop_samples": 46,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0,
+  "UserNotAtNode": 0
+}

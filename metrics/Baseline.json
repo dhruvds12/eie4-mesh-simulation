@@ -1,0 +1,34 @@
+{
+  "total_sent": 135,
+  "sent_by_type": {
+    "18": 72,
+    "4": 63
+  },
+  "total_control_sent": 166,
+  "control_sent_by_type": {
+    "15": 51,
+    "16": 95,
+    "6": 20
+  },
+  "total_delivered": 135,
+  "delivered_by_type": {
+    "18": 72,
+    "4": 63
+  },
+  "total_control_delivered": 347,
+  "collisions": 26,
+  "collisions_by_type": {
+    "15": 10,
+    "16": 5,
+    "6": 11
+  },
+  "hop_sum": 166055261978,
+  "hop_samples": 135,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0,
+  "user_not_at_node": 0
+}
+
+19:03:04.328127
+19:09:23.182276 run complete – stats written to logs/metrics_{{timestamp}}.json

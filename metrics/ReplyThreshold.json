@@ -1,3 +1,42 @@
+{
+  "total_sent": 145,
+  "sent_by_type": {
+    "18": 51,
+    "4": 94
+  },
+  "total_control_sent": 89,
+  "control_sent_by_type": {
+    "15": 35,
+    "16": 33,
+    "3": 1,
+    "6": 20
+  },
+  "total_delivered": 136,
+  "delivered_by_type": {
+    "18": 51,
+    "4": 85
+  },
+  "total_control_delivered": 232,
+  "collisions": 52,
+  "collisions_by_type": {
+    "15": 28,
+    "16": 2,
+    "3": 1,
+    "4": 9,
+    "6": 12
+  },
+  "hop_sum": 154052233872,
+  "hop_samples": 136,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0,
+  "user_not_at_node": 0
+}
+
+17:18:09.018765
+17:22:07.502568
+
+
 # ────────────── simulation timing ──────────────
 duration: 90s           # time we KEEP GENERATING traffic
 end_mode: drain         # immediate | drain
@@ -46,4 +85,4 @@ csma:
   be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/metrics_{{timestamp}}.json
+  metrics_file: logs/metrics_{{timestamp}}.json

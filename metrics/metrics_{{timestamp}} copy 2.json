@@ -1,0 +1,15 @@
+{
+  "total_sent": 72,
+  "total_control_sent": 200,
+  "total_delivered": 33,
+  "total_control_delivered": 227,
+  "collisions": 15,
+  "collisions_by_type": {
+    "15": 1,
+    "18": 6,
+    "4": 1,
+    "6": 7
+  },
+  "hop_sum": 33893535643,
+  "hop_samples": 33
+}
