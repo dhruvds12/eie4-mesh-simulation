@@ -18,7 +18,7 @@ type IRouter interface {
 
 	// initial message to the network to broadcast a hello message
 	SendBroadcastInfo(net mesh.INetwork, node mesh.INode)
-	SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode);
+	SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode)
 
 	// print out the routing table
 	PrintRoutingTable()
@@ -42,4 +42,6 @@ type IRouter interface {
 
 	BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, sendPacket []byte, packetID uint32)
 	SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string)
+
+	SetRoutingParams(th, rreqLim, ureqLim int)
 }

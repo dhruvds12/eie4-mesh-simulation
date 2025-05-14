@@ -26,7 +26,10 @@ type TrafficCfg struct {
 }
 
 type RoutingCfg struct {
-	MaxHops int `yaml:"max_hops" json:"max_hops"`
+	MaxHops            int `yaml:"max_hops" json:"max_hops"`
+	ReplyThresholdHops int `yaml:"reply_threshold_hops"  json:"reply_threshold_hops"`
+	RREQHopLimit       int `yaml:"rreq_hop_limit"        json:"rreq_hop_limit"`
+	UREQHopLimit       int `yaml:"ureq_hop_limit"        json:"ureq_hop_limit"`
 }
 
 type LogCfg struct {
@@ -96,6 +99,19 @@ func LoadScenario(path string) (*Scenario, error) {
 	}
 	if sc.EndMode == "" {
 		sc.EndMode = "immediate"
+	}
+
+	if sc.Routing.MaxHops == 0 {
+		sc.Routing.MaxHops = 10
+	}
+	if sc.Routing.ReplyThresholdHops == 0 {
+		sc.Routing.ReplyThresholdHops = 2
+	}
+	if sc.Routing.RREQHopLimit == 0 {
+		sc.Routing.RREQHopLimit = sc.Routing.MaxHops
+	}
+	if sc.Routing.UREQHopLimit == 0 {
+		sc.Routing.UREQHopLimit = sc.Routing.MaxHops
 	}
 
 	return sc, nil

@@ -77,6 +77,15 @@ func (r *Runner) Run() error {
 			); !ok {
 				log.Println("Failed to add the CSMA configuration!")
 			}
+
+			if ok := n.SetRoutingParams(
+				r.sc.Routing.ReplyThresholdHops,
+				r.sc.Routing.RREQHopLimit,
+				r.sc.Routing.UREQHopLimit,
+			); !ok {
+				log.Println("Failed to add the Routing Params configuration!")
+			}
+
 			r.net.Join(n)
 			for u := 0; u < r.sc.Users.PerNode; u++ {
 				n.AddConnectedUser(uint32(rand.Int31()))

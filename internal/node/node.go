@@ -307,3 +307,12 @@ func (n *nodeImpl) GetRandomKnownNode() (uint32, bool) {
 	}
 	return keys[rand.Intn(len(keys))], true
 }
+
+
+func (n *nodeImpl) SetRoutingParams(th, rreqLim, ureqLim int) bool {
+	if r, ok := n.router.(*routing.AODVRouter); ok {
+		r.SetRoutingParams(th, rreqLim, ureqLim)
+		return true
+	}
+	return false
+}

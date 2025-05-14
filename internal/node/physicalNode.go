@@ -406,3 +406,11 @@ func (p *physicalNode) GetRandomKnownNode() (uint32, bool) {
 	}
 	return keys[rand.Intn(len(keys))], true
 }
+
+func (p *physicalNode) SetRoutingParams(th, rreqLim, ureqLim int) bool {
+	if r, ok := p.router.(*routing.AODVRouter); ok {
+		r.SetRoutingParams(th, rreqLim, ureqLim)
+		return true
+	}
+	return false
+}

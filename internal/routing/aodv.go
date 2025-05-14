@@ -89,6 +89,10 @@ type AODVRouter struct {
 	BackoffScheme  string
 	BeUnit         time.Duration
 	BeMaxExp       int
+
+	ReplyThreshold int // only send RREP/UREP if my route.hops > threshold
+	RreqHopLimit   int // max hops we forward a RREQ
+	UreqHopLimit   int // max hops we forward a UREQ
 }
 
 // NewAODVRouter constructs a router for a specific node
@@ -117,8 +121,17 @@ func NewAODVRouter(ownerID uint32, bus *eventBus.EventBus) *AODVRouter {
 		BeUnit:         20 * time.Millisecond,
 		BeMaxExp:       5,
 	}
+	r.ReplyThreshold = 2
+	r.RreqHopLimit = 10
+	r.UreqHopLimit = 10
 	go r.txWorker()
 	return r
+}
+
+func (r *AODVRouter) SetRoutingParams(th, rreqLim, ureqLim int) {
+	r.ReplyThreshold = th
+	r.RreqHopLimit = rreqLim
+	r.UreqHopLimit = ureqLim
 }
 
 // ------------------------------------------------------------
@@ -641,12 +654,16 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 
 	// If we have a route to the destination, we can send RREP
-	if route, ok := r.getRoute(rh.RREQDestNodeID); ok {
+	if route, ok := r.getRoute(rh.RREQDestNodeID); ok && route.HopCount > r.ReplyThreshold {
 		r.eventBus.Publish(eventBus.Event{
 			Type: eventBus.EventControlMessageDelivered,
 		})
 		r.sendRREP(net, node, rh.RREQDestNodeID, rh.OriginNodeID, route.HopCount)
 		return
+	}
+
+	if int(bh.HopCount) >= r.RreqHopLimit {
+		return // drop – do not propagate further
 	}
 
 	fwdRREQ, packetId, err := packet.CreateRREQPacket(r.ownerID, rh.RREQDestNodeID, rh.OriginNodeID, bh.HopCount+1, bh.PacketID)
@@ -1121,18 +1138,45 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 
 	// If I have a path to user reply
 	if n, ok := r.hasUserEntry(uh.UREQUserID); ok {
-		r.eventBus.Publish(eventBus.Event{
-			Type: eventBus.EventControlMessageDelivered,
-		})
-		// reply with UREP along reverse path
-		log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
-		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, 0)
-		// r.BroadcastMessageCSMA(net, node, reply, pid)
-		r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
-		r.eventBus.Publish(eventBus.Event{
-			Type:       eventBus.EventControlMessageSent,
-			PacketType: packet.PKT_UREP,
-		})
+		route, have := r.getRoute(n.NodeID)
+		if have && route.HopCount > r.ReplyThreshold {
+			r.eventBus.Publish(eventBus.Event{
+				Type: eventBus.EventControlMessageDelivered,
+			})
+			// reply with UREP along reverse path
+			log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
+			reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, uint8(route.HopCount))
+			// r.BroadcastMessageCSMA(net, node, reply, pid)
+			r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
+			r.eventBus.Publish(eventBus.Event{
+				Type:       eventBus.EventControlMessageSent,
+				PacketType: packet.PKT_UREP,
+			})
+			return
+		}
+
+		log.Printf("[sim] [UREQ] Node %d: has ROUTE to user %d BUT DID NOT SHARE AS IN REPLYTHRESHOLD (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
+		
+		// send user home node info anyway --> not sure about this clearly no longer connected to the home node of the user and could be 
+		// outdated information --> therefore should not send
+		// if !have {
+		// 	r.eventBus.Publish(eventBus.Event{
+		// 		Type: eventBus.EventControlMessageDelivered,
+		// 	})
+		// 	// reply with UREP along reverse path
+		// 	log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
+		// 	reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, 0)
+		// 	// r.BroadcastMessageCSMA(net, node, reply, pid)
+		// 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
+		// 	r.eventBus.Publish(eventBus.Event{
+		// 		Type:       eventBus.EventControlMessageSent,
+		// 		PacketType: packet.PKT_UREP,
+		// 	})
+		// 	return
+		// }
+	}
+
+	if int(bh.HopCount) >= r.UreqHopLimit {
 		return
 	}
 

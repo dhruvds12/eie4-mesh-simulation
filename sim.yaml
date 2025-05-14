@@ -32,6 +32,9 @@ traffic:
 # ────────────── routing / MAC knobs ────────────
 routing:
   max_hops: 5
+  reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
+  rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
+  ureq_hop_limit:      8        # drop UREQ when hop-count >= ureq_hop_limit
 
 csma:
   cca_window:      5ms      # how long we must sense idle
