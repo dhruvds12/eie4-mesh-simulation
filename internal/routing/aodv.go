@@ -303,6 +303,9 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
 
 	if flags == packet.REQ_ACK {
+		r.eventBus.Publish(eventBus.Event{
+			Type:       eventBus.EventRequestedACK,
+		})
 		expire := time.Now().Add(10 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[packetID] = PendingTx{
@@ -363,6 +366,9 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 	})
 
 	if flags == packet.REQ_ACK {
+		r.eventBus.Publish(eventBus.Event{
+			Type:       eventBus.EventRequestedACK,
+		})
 		expire := time.Now().Add(10 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[packetID] = PendingTx{
@@ -948,6 +954,9 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
 	if bh.Flags == packet.REQ_ACK {
+		r.eventBus.Publish(eventBus.Event{
+			Type:       eventBus.EventRequestedACK,
+		})
 		// log.Printf("{Implicit ACK} Node %d: overheard forward from %d => implicit ack for msgID=%d", r.ownerID, originID, msg.GetID())
 		// TODO: need to wait for an explicit ACK request from sender (simplified)
 		expire := time.Now().Add(3 * time.Second) // e.g. 3s
@@ -1057,6 +1066,9 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: userMessagePacket, pktID: packetID}
 
 	if bh.Flags == packet.REQ_ACK {
+		r.eventBus.Publish(eventBus.Event{
+			Type:       eventBus.EventRequestedACK,
+		})
 
 		expire := time.Now().Add(3 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
@@ -1095,6 +1107,9 @@ func (r *AODVRouter) HandleDataAck(receivedPacket []byte) {
 	if _, ok := r.pendingTxs[ack.OriginalPacketID]; ok {
 		log.Printf("[ACK] Node %d: received ACK for msgID=%d\n", r.ownerID, ack.OriginalPacketID)
 		delete(r.pendingTxs, ack.OriginalPacketID)
+		r.eventBus.Publish(eventBus.Event{
+			Type:       eventBus.EventReceivedDataAck,
+		})
 	}
 	r.pendingMu.Unlock()
 }
@@ -1403,13 +1418,13 @@ func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uint32, 
 	// 	return
 	// }
 
-	route, ok := r.getRoute(to)
-	if !ok {
-		log.Printf("[sim] Node %d: no route to send data ack destined for %d.\n", r.ownerID, to)
-		return
-	}
+	// route, ok := r.getRoute(to)
+	// if !ok {
+	// 	log.Printf("[sim] Node %d: no route to send data ack destined for %d.\n", r.ownerID, to)
+	// 	return
+	// }
 
-	ackPacket, packetID, err := packet.CreateACKPacket(r.ownerID, to, route.NextHop, prevMsgId, 0)
+	ackPacket, packetID, err := packet.CreateACKPacket(r.ownerID, to, to, prevMsgId, 0)
 
 	if err != nil {
 		return

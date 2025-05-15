@@ -25,6 +25,8 @@ const (
 	EventNoRoute                 EventType = "NO_ROUTE"
 	EventNoRouteUser             EventType = "NO_ROUTE_USER"
 	EventUserNotAtNode           EventType = "USER_NOT_ATNODE"
+	EventRequestedACK            EventType = "REQUESTED_ACK"
+	EventReceivedDataAck         EventType = "RECEIVED_ACK"
 )
 
 // RouteEntry represents an entry in the routing table.

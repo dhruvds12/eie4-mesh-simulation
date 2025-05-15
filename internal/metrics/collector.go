@@ -24,6 +24,8 @@ type Counters struct {
 	NoRoute                uint64           `json:"no_route"`
 	NoRouteUser            uint64           `json:"no_route_user"`
 	UserNotAtNode          uint64           `json:"user_not_at_node"`
+	ReceivedAck            uint64           `json:"received_ack"`
+	RequestedAck           uint64           `json:"requested_ack"`
 }
 
 type Collector struct {
@@ -104,38 +106,52 @@ func (c *Collector) AddUserNotAtNode() {
 	c.mu.Unlock()
 }
 
+func (c *Collector) AddReceivedDataAck() {
+	c.mu.Lock()
+	c.ReceivedAck++
+	c.mu.Unlock()
+}
+
+func (c *Collector) AddRequestedACK() {
+	c.mu.Lock()
+	c.RequestedAck++
+	c.mu.Unlock()
+}
+
 func (c *Collector) Flush(file string) error {
-    c.mu.Lock()
-    snap := Counters{
-        TotalSent:              c.TotalSent,
-        TotalControlSent:       c.TotalControlSent,
-        TotalDelivered:         c.TotalDelivered,
-        TotalControlDelivered:  c.TotalControlDelivered,
-        Collisions:             c.Collisions,
-        HopSum:                 c.HopSum,
-        HopCount:               c.HopCount,
-        LostMessages:           c.LostMessages,
-        NoRoute:                c.NoRoute,
-        NoRouteUser:            c.NoRouteUser,
-        UserNotAtNode:          c.UserNotAtNode,
-        TotalSentByType:        make(map[uint8]uint64, len(c.TotalSentByType)),
-        TotalControlSentByType: make(map[uint8]uint64, len(c.TotalControlSentByType)),
-        TotalDeliveredByType:   make(map[uint8]uint64, len(c.TotalDeliveredByType)),
-        CollByType:             make(map[uint8]uint64, len(c.CollByType)),
-    }
-    for k, v := range c.TotalSentByType {
-        snap.TotalSentByType[k] = v
-    }
-    for k, v := range c.TotalControlSentByType {
-        snap.TotalControlSentByType[k] = v
-    }
-    for k, v := range c.TotalDeliveredByType {
-        snap.TotalDeliveredByType[k] = v
-    }
-    for k, v := range c.CollByType {
-        snap.CollByType[k] = v
-    }
-    c.mu.Unlock()
+	c.mu.Lock()
+	snap := Counters{
+		TotalSent:              c.TotalSent,
+		TotalControlSent:       c.TotalControlSent,
+		TotalDelivered:         c.TotalDelivered,
+		TotalControlDelivered:  c.TotalControlDelivered,
+		Collisions:             c.Collisions,
+		HopSum:                 c.HopSum,
+		HopCount:               c.HopCount,
+		LostMessages:           c.LostMessages,
+		NoRoute:                c.NoRoute,
+		NoRouteUser:            c.NoRouteUser,
+		UserNotAtNode:          c.UserNotAtNode,
+		ReceivedAck:            c.ReceivedAck,
+		RequestedAck:           c.RequestedAck,
+		TotalSentByType:        make(map[uint8]uint64, len(c.TotalSentByType)),
+		TotalControlSentByType: make(map[uint8]uint64, len(c.TotalControlSentByType)),
+		TotalDeliveredByType:   make(map[uint8]uint64, len(c.TotalDeliveredByType)),
+		CollByType:             make(map[uint8]uint64, len(c.CollByType)),
+	}
+	for k, v := range c.TotalSentByType {
+		snap.TotalSentByType[k] = v
+	}
+	for k, v := range c.TotalControlSentByType {
+		snap.TotalControlSentByType[k] = v
+	}
+	for k, v := range c.TotalDeliveredByType {
+		snap.TotalDeliveredByType[k] = v
+	}
+	for k, v := range c.CollByType {
+		snap.CollByType[k] = v
+	}
+	c.mu.Unlock()
 
 	f, err := os.Create(file)
 	if err != nil {

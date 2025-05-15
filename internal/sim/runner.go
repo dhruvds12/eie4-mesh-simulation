@@ -162,6 +162,10 @@ func (r *Runner) consumeEvents(ch chan eb.Event) {
 			r.coll.AddNoRouteUser()
 		case eb.EventUserNotAtNode:
 			r.coll.AddUserNotAtNode()
+		case eb.EventRequestedACK:
+			r.coll.AddRequestedACK()
+		case eb.EventReceivedDataAck:
+			r.coll.AddReceivedDataAck()
 		}
 	}
 }
