@@ -1,7 +1,7 @@
 # ────────────── simulation timing ──────────────
-duration: 90s           # time we KEEP GENERATING traffic
+duration: 30s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
-drain_timeout: 300s      # max extra wall-clock time we allow when end_mode = drain
+drain_timeout: 60s      # max extra wall-clock time we allow when end_mode = drain #300
 
 # ────────────── randomness ─────────────────────
 seed: 12345
@@ -10,7 +10,7 @@ seed: 12345
 area_km2: 3.0
 
 nodes:
-  count: 10
+  count: 5 #10
   placement: grid        # uniform | grid | hotspot   (only grid implemented)
   join_delay: 3000ms
 
@@ -22,7 +22,7 @@ startup_delay: 30s
 # ────────────── traffic model ──────────────────
 traffic:
   pattern: poisson
-  msg_per_node_per_min: 10
+  msg_per_node_per_min: 5 #10
   restrict_to_known_routes: true 
   packet_mix:
     DATA:      0.5
@@ -31,7 +31,7 @@ traffic:
 
 # ────────────── routing / MAC knobs ────────────
 routing:
-  max_hops: 5
+  max_hops: 5                   # NOT ACTUALLY A WORKING FIELD
   reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
   rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
   ureq_hop_limit:      8        # drop UREQ when hop-count >= ureq_hop_limit

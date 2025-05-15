@@ -36,12 +36,17 @@ type RouteEntry struct {
 
 // Used to store transactions that are pending ACKs
 type PendingTx struct {
-	MsgID               uint32
-	Dest                uint32 // destination of the data
-	PotentialBrokenNode uint32 // (the broken node)
-	Origin              uint32 // original source of the data
-	ExpiryTime          time.Time
+	MsgID      uint32
+	Pkt        []byte
+	Dest       uint32 // destination of the data
+	NextHop    uint32 // (the broken node)
+	Origin     uint32 // original source of the data --> required to send route err back to sender
+	Attempts   int
+	ExpiryTime time.Time
 }
+
+const maxRetrans = 3
+const retryTimeout = 3 * time.Second
 
 type UserEntry struct {
 	NodeID   uint32 // home node
@@ -54,11 +59,13 @@ type DataQueueEntry struct {
 	payload    string
 	sendUserID uint32
 	destUserID uint32
+	flags      uint8
 }
 
 type userMessageQueueEntry struct {
 	senderID uint32
 	payload  string
+	flags    uint8
 }
 
 // AODVRouter is a per-node router
@@ -172,28 +179,42 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 			var deleteIds []uint32
 			for msgID, tx := range tempPendingTxs {
 				if now.After(tx.ExpiryTime) {
-					log.Printf("[Timeout] Node %d: pendingTx expired for msgID=%d => route to %d is considered broken",
-						r.ownerID, msgID, tx.Dest)
 
-					// Remove from pendingTxs
-					// delete(r.pendingTxs, msgID)
-					deleteIds = append(deleteIds, msgID)
+					if tx.Attempts < maxRetrans {
+						log.Printf("[RETRY] Node %d resending %d (try %d)",
+							r.ownerID, msgID, tx.Attempts+1)
+						r.txQueue <- outgoingTx{net: net, sender: node,
+							pkt: tx.Pkt, pktID: msgID}
 
-					// TODO: RE ENABLE --> removed for testing
-					// No nodes are being turned off currently so investigating if large loss of messages is due to
-					// incorrect route invalidation.
-					// r.InvalidateRoutes(tx.PotentialBrokenNode, tx.Dest, 0)
+						tx.Attempts++
+						tx.ExpiryTime = now.Add(retryTimeout)
+						r.pendingMu.Lock()
+						r.pendingTxs[msgID] = tx
+						r.pendingMu.Unlock()
+						continue
+					} else {
+						log.Printf("[Timeout] Node %d: pendingTx expired for msgID=%d => route to %d is considered broken",
+							r.ownerID, msgID, tx.Dest)
 
-					route, found := r.getRoute(tx.Origin)
-					if found {
+						// Remove from pendingTxs
+						// delete(r.pendingTxs, msgID)
+						deleteIds = append(deleteIds, msgID)
 
-						// If we have net & node references, we can send RERR
-						if net != nil && node != nil {
-							// We'll craft a minimal sendRERR. We can guess the original source as r.ownerID,
-							// or store it in PendingTx if you want the actual source
-							r.sendRERR(net, node, route.NextHop, tx.Dest, tx.PotentialBrokenNode, msgID, tx.Origin)
+						// TODO: RE ENABLE --> removed for testing
+						// No nodes are being turned off currently so investigating if large loss of messages is due to
+						// incorrect route invalidation.
+						r.InvalidateRoutes(tx.NextHop, tx.Dest, 0)
+						if r.ownerID != tx.Origin {
+							route, found := r.getRoute(tx.Origin)
+							if found {
+								if net != nil && node != nil {
+									r.sendRERR(net, node, route.NextHop, tx.Dest, tx.NextHop, msgID, tx.Origin)
+								}
+							}
 						}
+
 					}
+
 				}
 			}
 
@@ -236,7 +257,7 @@ func (r *AODVRouter) StopTxWorker() {
 
 // -- IRouter methods --
 
-func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint32, payload string) {
+func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint32, payload string, flags uint8) {
 	// Check if we already have a route
 	entry, hasRoute := r.getRoute(destID)
 	if !hasRoute {
@@ -247,6 +268,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 			payload:    payload,
 			sendUserID: 0,
 			destUserID: 0,
+			flags:      flags,
 		}
 		r.dataQueue[destID] = append(r.dataQueue[destID], dqe)
 		r.initiateRREQ(net, sender, destID)
@@ -255,7 +277,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 
 	nextHop := entry.NextHop
 	payloadBytes := []byte(payload)
-	completePacket, packetID, err := packet.CreateDataPacket(r.ownerID, destID, nextHop, 0, payloadBytes)
+	completePacket, packetID, err := packet.CreateDataPacket(r.ownerID, r.ownerID, destID, nextHop, 0, payloadBytes, flags)
 	if err != nil {
 		log.Printf("[sim] Node %d: failed to create data packet: %v\n", r.ownerID, err)
 		return
@@ -280,15 +302,17 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 	})
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
 
-	if destID != nextHop {
+	if flags == packet.REQ_ACK {
 		expire := time.Now().Add(10 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[packetID] = PendingTx{
-			MsgID:               packetID,
-			Dest:                destID,
-			PotentialBrokenNode: nextHop,
-			Origin:              r.ownerID,
-			ExpiryTime:          expire,
+			MsgID:      packetID,
+			Pkt:        completePacket,
+			Dest:       destID,
+			NextHop:    nextHop,
+			Origin:     r.ownerID,
+			Attempts:   0,
+			ExpiryTime: expire,
 		}
 		r.pendingMu.Unlock()
 
@@ -296,13 +320,13 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 
 }
 
-func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string) {
+func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string, flags uint8) {
 	// check GUT
 	userEntry, ok := r.hasUserEntry(destUserID)
 	if !ok {
 		// save the message
 		log.Printf("[USER MSG] Node %d no route to user %d\n", r.ownerID, destUserID)
-		r.saveUsermessage(sendUserID, destUserID, payload)
+		r.saveUsermessage(sendUserID, destUserID, payload, flags)
 		r.initiateUREQ(net, sender, destUserID)
 		return
 	}
@@ -316,6 +340,7 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 			payload:    payload,
 			sendUserID: sendUserID,
 			destUserID: destUserID,
+			flags:      flags,
 		}
 		r.dataQueue[userEntry.NodeID] = append(r.dataQueue[userEntry.NodeID], dqe)
 		r.initiateRREQ(net, sender, userEntry.NodeID)
@@ -324,7 +349,7 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 
 	nextHop := entry.NextHop
 	payloadBytes := []byte(payload)
-	completePacket, packetID, err := packet.CreateUSERMessagePacket(r.ownerID, sendUserID, destUserID, userEntry.NodeID, nextHop, 0, payloadBytes)
+	completePacket, packetID, err := packet.CreateUSERMessagePacket(r.ownerID, r.ownerID, sendUserID, destUserID, userEntry.NodeID, nextHop, 0, payloadBytes, flags)
 	if err != nil {
 		log.Printf("[sim] Node %d: failed to create data packet: %v\n", r.ownerID, err)
 		return
@@ -337,15 +362,17 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 		PacketType: packet.PKT_USER_MSG,
 	})
 
-	if userEntry.NodeID != nextHop {
+	if flags == packet.REQ_ACK {
 		expire := time.Now().Add(10 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[packetID] = PendingTx{
-			MsgID:               packetID,
-			Dest:                userEntry.NodeID,
-			PotentialBrokenNode: nextHop,
-			Origin:              r.ownerID,
-			ExpiryTime:          expire,
+			MsgID:      packetID,
+			Pkt:        completePacket,
+			Dest:       userEntry.NodeID,
+			NextHop:    nextHop,
+			Origin:     r.ownerID,
+			Attempts:   0,
+			ExpiryTime: expire,
 		}
 		r.pendingMu.Unlock()
 
@@ -408,7 +435,7 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 		r.pendingMu.Lock()
 		if _, ok := r.pendingTxs[bh.PacketID]; ok {
 			// ack
-			log.Printf("{Implicit ACK}  Node %d: overheard DATA forward from %d => implicit ack for msgID=%d",
+			log.Printf("[Implicit ACK]  Node %d: overheard DATA forward from %d => implicit ack for msgID=%d",
 				r.ownerID, bh.SrcNodeID, bh.PacketID)
 			delete(r.pendingTxs, bh.PacketID)
 		}
@@ -427,7 +454,7 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 		r.pendingMu.Lock()
 		if _, ok := r.pendingTxs[bh.PacketID]; ok {
 			// ack
-			log.Printf("{Implicit ACK}  Node %d: overheard USER MSG forward from %d => implicit ack for msgID=%d",
+			log.Printf("[Implicit ACK]  Node %d: overheard USER MSG forward from %d => implicit ack for msgID=%d",
 				r.ownerID, bh.SrcNodeID, bh.PacketID)
 			delete(r.pendingTxs, bh.PacketID)
 		}
@@ -725,11 +752,11 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 		for _, dqe := range r.dataQueue[rreph.OriginNodeID] {
 			if dqe.packetType == packet.PKT_DATA {
 
-				r.SendData(net, node, rreph.OriginNodeID, dqe.payload)
+				r.SendData(net, node, rreph.OriginNodeID, dqe.payload, dqe.flags)
 			}
 
 			if dqe.packetType == packet.PKT_USER_MSG {
-				r.SendUserMessage(net, node, dqe.sendUserID, dqe.destUserID, dqe.payload)
+				r.SendUserMessage(net, node, dqe.sendUserID, dqe.destUserID, dqe.payload, dqe.flags)
 			}
 		}
 		delete(r.dataQueue, rreph.OriginNodeID)
@@ -796,9 +823,6 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, receivedPack
 
 	if r.ownerID != bh.DestNodeID {
 		// Check if node is the intended target
-		r.eventBus.Publish(eventBus.Event{
-			Type: eventBus.EventControlMessageDelivered,
-		})
 		log.Printf("{RERR} Node %d: received RERR not intended for me.\n", r.ownerID)
 		return
 	}
@@ -808,6 +832,10 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, receivedPack
 		r.eventBus.Publish(eventBus.Event{
 			Type:   eventBus.EventLostMessage,
 			NodeID: r.ownerID,
+		})
+
+		r.eventBus.Publish(eventBus.Event{
+			Type: eventBus.EventControlMessageDelivered,
 		})
 		log.Printf("{RERR} Node %d: received RERR for my own message, stopping here.\n", r.ownerID)
 		return
@@ -858,10 +886,16 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
+	// doesn't matter if packet is seeen need to send the ack
+	if bh.Flags == packet.REQ_ACK {
+		r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
+	}
+
 	if r.checkSeenPackets(bh.PacketID) {
 		log.Printf("Node %d: ignoring duplicate Data %d.\n", r.ownerID, bh.PacketID)
 		return
 	}
+
 	r.addSeenPacket(bh.PacketID)
 	payloadString := string(payload)
 	// If I'm the final destination, do nothing -> the node can "deliver" it
@@ -872,13 +906,12 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 			Type:        eventBus.EventMessageDelivered,
 			NodeID:      r.ownerID,
 			Payload:     payloadString,
-			OtherNodeID: bh.SrcNodeID,
+			OtherNodeID: dh.OriginNodeID,
 			Timestamp:   time.Now(),
 			PacketType:  packet.PKT_DATA,
 		})
 		// TODO: this is a simplification as this should depend on the packet header -> should not always be sending an ack
 		//TODO: Explicit ack disabled
-		r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
 		return
 	}
 
@@ -898,11 +931,11 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		log.Printf("[sim] Node %d: no route to forward DATA destined for %d.\n", r.ownerID, dest)
 		// Optionally: r.initiateRREQ(...)
 		// no route therefore, we need ot send RERR
-		r.sendRERR(net, node, bh.SrcNodeID, dest, r.ownerID, bh.PacketID, bh.SrcNodeID)
+		r.sendRERR(net, node, bh.SrcNodeID, dest, r.ownerID, bh.PacketID, dh.OriginNodeID)
 		return
 	}
 
-	dataPacket, packetID, err := packet.CreateDataPacket(bh.SrcNodeID, dh.FinalDestID, route.NextHop, bh.HopCount+1, payload, bh.PacketID)
+	dataPacket, packetID, err := packet.CreateDataPacket(dh.OriginNodeID, r.ownerID, dh.FinalDestID, route.NextHop, bh.HopCount+1, payload, bh.Flags, bh.PacketID)
 	if err != nil {
 		return
 	}
@@ -914,17 +947,19 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: dataPacket, pktID: packetID}
 
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
-	if route.NextHop != dest {
+	if bh.Flags == packet.REQ_ACK {
 		// log.Printf("{Implicit ACK} Node %d: overheard forward from %d => implicit ack for msgID=%d", r.ownerID, originID, msg.GetID())
 		// TODO: need to wait for an explicit ACK request from sender (simplified)
 		expire := time.Now().Add(3 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[bh.PacketID] = PendingTx{
-			MsgID:               packetID,
-			Dest:                dest,
-			PotentialBrokenNode: route.NextHop,
-			Origin:              bh.SrcNodeID,
-			ExpiryTime:          expire,
+			MsgID:      packetID,
+			Pkt:        dataPacket,
+			Dest:       dest,
+			NextHop:    route.NextHop,
+			Origin:     dh.OriginNodeID,
+			Attempts:   0,
+			ExpiryTime: expire,
 		}
 		r.pendingMu.Unlock()
 		return
@@ -935,7 +970,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	// r.pendingTxs[bh.PacketID] = PendingTx{
 	// 	MsgID:               bh.PacketID,
 	// 	Dest:                dest,
-	// 	PotentialBrokenNode: route.NextHop,
+	// 	NextHop: route.NextHop,
 	// 	Origin:              bh.SrcNodeID,
 	// 	ExpiryTime:          expire,
 	// }
@@ -946,6 +981,10 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	bh, umh, payload, err := packet.DeserialiseUSERMessagePacket(receivedPacket)
 	if err != nil {
 		return
+	}
+
+	if bh.Flags == packet.REQ_ACK {
+		r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
 	}
 
 	if r.checkSeenPackets(bh.PacketID) {
@@ -965,17 +1004,16 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 				Type:        eventBus.EventMessageDelivered, //TODO change to another type to represent a user message
 				NodeID:      r.ownerID,
 				Payload:     payloadString,
-				OtherNodeID: bh.SrcNodeID,
+				OtherNodeID: umh.OriginNodeID,
 				Timestamp:   time.Now(),
 				PacketType:  packet.PKT_USER_MSG,
 			})
 			// TODO: this is a simplification as this should depend on the packet header -> should not always be sending an ack
-			r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
 			return
 		}
 
 		// find route back to sender to send UERR
-		route, ok := r.getRoute(bh.SrcNodeID)
+		route, ok := r.getRoute(umh.OriginNodeID)
 		if ok {
 			r.eventBus.Publish(eventBus.Event{
 				Type:   eventBus.EventUserNotAtNode,
@@ -983,7 +1021,7 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 			})
 			// Th
 
-			r.initiateUERR(net, node, route.NextHop, bh.SrcNodeID, bh.PacketID, umh.ToUserID)
+			r.initiateUERR(net, node, route.NextHop, umh.OriginNodeID, bh.PacketID, umh.ToUserID)
 		} else {
 			log.Println("[UERR FAILED] Could not send back to user as I have no route back to sender - strange behaviour")
 		}
@@ -1006,11 +1044,11 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 		log.Printf("[sim] Node %d: no route to forward USER MESSAGE destined for %d.\n", r.ownerID, dest)
 		// Optionally: r.initiateRREQ(...)
 		// no route therefore, we need ot send RERR
-		r.sendRERR(net, node, bh.SrcNodeID, dest, r.ownerID, bh.PacketID, bh.SrcNodeID)
+		r.sendRERR(net, node, bh.SrcNodeID, dest, r.ownerID, bh.PacketID, umh.OriginNodeID)
 		return
 	}
 
-	userMessagePacket, packetID, err := packet.CreateUSERMessagePacket(bh.SrcNodeID, umh.FromUserID, umh.ToUserID, umh.ToNodeID, route.NextHop, bh.HopCount+1, payload, bh.PacketID)
+	userMessagePacket, packetID, err := packet.CreateUSERMessagePacket(umh.OriginNodeID, r.ownerID, umh.FromUserID, umh.ToUserID, umh.ToNodeID, route.NextHop, bh.HopCount+1, payload, bh.Flags, bh.PacketID)
 	if err != nil {
 		return
 	}
@@ -1018,16 +1056,18 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	// r.BroadcastMessageCSMA(net, node, userMessagePacket, packetID)
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: userMessagePacket, pktID: packetID}
 
-	if route.NextHop != dest {
+	if bh.Flags == packet.REQ_ACK {
 
 		expire := time.Now().Add(3 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[bh.PacketID] = PendingTx{
-			MsgID:               bh.PacketID,
-			Dest:                dest,
-			PotentialBrokenNode: route.NextHop,
-			Origin:              bh.SrcNodeID,
-			ExpiryTime:          expire,
+			MsgID:      bh.PacketID,
+			Pkt:        userMessagePacket,
+			Dest:       dest,
+			NextHop:    route.NextHop,
+			Origin:     umh.OriginNodeID,
+			Attempts:   0,
+			ExpiryTime: expire,
 		}
 		r.pendingMu.Unlock()
 
@@ -1053,7 +1093,7 @@ func (r *AODVRouter) HandleDataAck(receivedPacket []byte) {
 	// log.Printf("{ACK} Node %d: received ACK for msgID=%d\n", r.ownerID, ack.MsgID)
 	r.pendingMu.Lock()
 	if _, ok := r.pendingTxs[ack.OriginalPacketID]; ok {
-		log.Printf("{ACK} Node %d: received ACK for msgID=%d\n", r.ownerID, ack.OriginalPacketID)
+		log.Printf("[ACK] Node %d: received ACK for msgID=%d\n", r.ownerID, ack.OriginalPacketID)
 		delete(r.pendingTxs, ack.OriginalPacketID)
 	}
 	r.pendingMu.Unlock()
@@ -1156,8 +1196,8 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 		}
 
 		log.Printf("[sim] [UREQ] Node %d: has ROUTE to user %d BUT DID NOT SHARE AS IN REPLYTHRESHOLD (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
-		
-		// send user home node info anyway --> not sure about this clearly no longer connected to the home node of the user and could be 
+
+		// send user home node info anyway --> not sure about this clearly no longer connected to the home node of the user and could be
 		// outdated information --> therefore should not send
 		// if !have {
 		// 	r.eventBus.Publish(eventBus.Event{
@@ -1218,7 +1258,7 @@ func (r *AODVRouter) handleUREP(net mesh.INetwork, node mesh.INode, receivedPack
 		msgs := r.getUserMessages(uh.UREPUserID)
 		for _, umqe := range msgs {
 			log.Printf("[USER MESSAGE] Complete UREQ sending message to user %d from user %d", uh.UREPUserID, umqe.senderID)
-			r.SendUserMessage(net, node, umqe.senderID, uh.UREPUserID, umqe.payload)
+			r.SendUserMessage(net, node, umqe.senderID, uh.UREPUserID, umqe.payload, umqe.flags)
 		}
 		return
 
@@ -1358,10 +1398,10 @@ func (r *AODVRouter) InvalidateRoutes(brokenNode uint32, dest uint32, sender uin
 // send ack for data packets
 func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uint32, prevMsgId uint32) {
 
-	if true {
-		log.Println("[sim] disabled explicit acks")
-		return
-	}
+	// if true {
+	// 	log.Println("[sim] disabled explicit acks")
+	// 	return
+	// }
 
 	route, ok := r.getRoute(to)
 	if !ok {
@@ -1428,13 +1468,14 @@ func (r *AODVRouter) removeUserEntry(userId uint32, nodeId uint32) bool {
 	return false
 }
 
-func (r *AODVRouter) saveUsermessage(senderUserID, destUserId uint32, payload string) {
+func (r *AODVRouter) saveUsermessage(senderUserID, destUserId uint32, payload string, flags uint8) {
 	r.queueMu.Lock()
 	defer r.queueMu.Unlock()
 
 	umqe := userMessageQueueEntry{
 		senderID: senderUserID,
 		payload:  payload,
+		flags:    flags,
 	}
 
 	r.userMessageQueue[destUserId] = append(r.userMessageQueue[destUserId], umqe)

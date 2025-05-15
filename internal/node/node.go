@@ -95,13 +95,13 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 // }
 
 // SendData is a convenience method calling into the router
-func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
-	n.router.SendData(net, n, destID, payload)
+func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string, flags uint8) {
+	n.router.SendData(net, n, destID, payload, flags)
 }
 
 // send user message
-func (n *nodeImpl) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string) {
-	n.router.SendUserMessage(net, n, userID, destUserID, payload)
+func (n *nodeImpl) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string, flags uint8) {
+	n.router.SendUserMessage(net, n, userID, destUserID, payload, flags)
 }
 
 // BroadcastHello sends a HELLO broadcast announcing the node’s presence.
@@ -307,7 +307,6 @@ func (n *nodeImpl) GetRandomKnownNode() (uint32, bool) {
 	}
 	return keys[rand.Intn(len(keys))], true
 }
-
 
 func (n *nodeImpl) SetRoutingParams(th, rreqLim, ureqLim int) bool {
 	if r, ok := n.router.(*routing.AODVRouter); ok {

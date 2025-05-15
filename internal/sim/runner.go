@@ -12,6 +12,7 @@ import (
 	"mesh-simulation/internal/metrics"
 	"mesh-simulation/internal/network"
 	"mesh-simulation/internal/node"
+	"mesh-simulation/internal/packet"
 )
 
 type Runner struct {
@@ -198,7 +199,7 @@ func (r *Runner) emitRandomTraffic() {
 	pt := choosePacket(r.sc.Traffic.PacketMix)
 	switch pt {
 	case "DATA":
-		from.SendData(r.net, to.GetID(), "hello")
+		from.SendData(r.net, to.GetID(), "hello", packet.REQ_ACK)
 	case "USER_MSG":
 		users := to.GetConnectedUsers()
 		if len(users) == 0 {
@@ -207,7 +208,7 @@ func (r *Runner) emitRandomTraffic() {
 		du := users[rand.Intn(len(users))]
 		su := uint32(rand.Int31())
 		from.AddConnectedUser(su)
-		from.SendUserMessage(r.net, su, du, "ping")
+		from.SendUserMessage(r.net, su, du, "ping", packet.REQ_ACK)
 	case "BROADCAST":
 		from.SendBroadcastInfo(r.net)
 	}

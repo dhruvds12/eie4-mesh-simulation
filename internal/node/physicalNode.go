@@ -113,7 +113,8 @@ func (p *physicalNode) Run(net mesh.INetwork) {
 }
 
 // SendData sends data to a specified destination using the node’s router.
-func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string) {
+// TODO added flags variable not sent over mqtt!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -------------------------------------------------
+func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string, flags uint8) {
 	// p.router.SendDataCSMA(net, p, destID, payload)
 
 	// also need to send a message to the physical node to send a messge using lora
@@ -142,8 +143,8 @@ func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string
 }
 
 // send user message
-func (p *physicalNode) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string) {
-	p.router.SendUserMessage(net, p, userID, destUserID, payload)
+func (p *physicalNode) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string, flags uint8) {
+	p.router.SendUserMessage(net, p, userID, destUserID, payload, flags)
 
 	// Publish to mqtt and tell the node to send a message to the user.
 

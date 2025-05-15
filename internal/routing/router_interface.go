@@ -7,7 +7,9 @@ import (
 // IRouter is the interface that all routing algorithms must implement.
 type IRouter interface {
 	// Called by the node to send data to destID
-	SendData(net mesh.INetwork, sender mesh.INode, destID uint32, payload string)
+	SendData(net mesh.INetwork, sender mesh.INode, destID uint32, payload string, flags uint8)
+
+	SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string, flags uint8)
 	// Called by the node to send data to destID using CSMA
 	// SendDataCSMA(net mesh.INetwork, sender mesh.INode, destID uint32, payload string)
 	// Called by the node when it receives *any* message, so the router can process RREQ, RREP, or forward data
@@ -41,7 +43,6 @@ type IRouter interface {
 	RemoveRouteEntry(dest uint32)
 
 	BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, sendPacket []byte, packetID uint32)
-	SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string)
 
 	SetRoutingParams(th, rreqLim, ureqLim int)
 }

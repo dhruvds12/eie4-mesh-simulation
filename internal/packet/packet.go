@@ -21,6 +21,13 @@ const (
 	PKT_USER_MSG       uint8 = 0x12 //18 // user lookup error
 )
 
+const (
+	FROM_GATEWAY uint8 = 0x01
+	TO_GATEWAY   uint8 = 0x02
+	I_AM_GATEWAY uint8 = 0x03
+	REQ_ACK      uint8 = 0x04
+)
+
 const MaxPacketSize = 255
 
 const BROADCAST_ADDR uint32 = 0xFFFFFFFF
@@ -62,7 +69,8 @@ type ACKHeader struct {
 }
 
 type DataHeader struct {
-	FinalDestID uint32
+	FinalDestID  uint32
+	OriginNodeID uint32
 }
 
 type InfoHeader struct {
@@ -93,9 +101,10 @@ type UERRHeader struct {
 }
 
 type UserMsgHeader struct {
-	FromUserID uint32
-	ToUserID   uint32
-	ToNodeID   uint32
+	FromUserID   uint32
+	ToUserID     uint32
+	ToNodeID     uint32
+	OriginNodeID uint32
 }
 
 func (bh *BaseHeader) SerialiseBaseHeader() ([]byte, error) {
@@ -198,16 +207,18 @@ func (ack *ACKHeader) DeserialiseACKHeader(buf []byte) error {
 }
 
 func (d *DataHeader) SerialiseDataHeader() ([]byte, error) {
-	buf := make([]byte, 4)
+	buf := make([]byte, 8)
 	binary.LittleEndian.PutUint32(buf[0:4], d.FinalDestID)
+	binary.LittleEndian.PutUint32(buf[4:8], d.OriginNodeID)
 	return buf, nil
 }
 
 func (d *DataHeader) DeserialiseDataHeader(buf []byte) error {
-	if len(buf) < 4 {
+	if len(buf) < 8 {
 		return fmt.Errorf("buffer too short for Data header")
 	}
 	d.FinalDestID = binary.LittleEndian.Uint32(buf[0:4])
+	d.OriginNodeID = binary.LittleEndian.Uint32(buf[4:8])
 	return nil
 }
 
@@ -257,7 +268,7 @@ func chooseID(ids ...uint32) uint32 {
 	return createPacketID()
 }
 
-func CreateDataPacket(srcID, destID, nextHopID uint32, numHops uint8, payload []byte, packetID ...uint32) ([]byte, uint32, error) {
+func CreateDataPacket(originNodeID, srcID, destID, nextHopID uint32, numHops uint8, payload []byte, flags uint8, packetID ...uint32) ([]byte, uint32, error) {
 
 	pid := chooseID(packetID...)
 
@@ -266,13 +277,14 @@ func CreateDataPacket(srcID, destID, nextHopID uint32, numHops uint8, payload []
 		SrcNodeID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_DATA,
-		Flags:      0x0,
+		Flags:      flags,
 		HopCount:   numHops,
 		Reserved:   0x0,
 	}
 
 	dh := DataHeader{
-		FinalDestID: destID,
+		FinalDestID:  destID,
+		OriginNodeID: originNodeID,
 	}
 
 	bhBytes, err := bh.SerialiseBaseHeader()
@@ -471,7 +483,7 @@ func CreateACKPacket(srcID, destID, nextHopID, originalPacketID uint32, numHops 
 
 	ackBytes, err := ack.SerialiseACKHeader()
 	if err != nil {
-		return nil, 0, fmt.Errorf("error serailising RREPHeader")
+		return nil, 0, fmt.Errorf("error serailising ack")
 	}
 
 	totalLength := len(bhBytes) + len(ackBytes)
@@ -655,14 +667,14 @@ func DeserialiseDataPacket(buf []byte) (bh BaseHeader, dh DataHeader, payload []
 	}
 	offset += 16
 
-	if len(buf) < offset+4 {
+	if len(buf) < offset+8 {
 		return bh, dh, nil, fmt.Errorf("buffer too short for DataHeader")
 	}
-	err = dh.DeserialiseDataHeader(buf[offset : offset+4])
+	err = dh.DeserialiseDataHeader(buf[offset : offset+8])
 	if err != nil {
 		return
 	}
-	offset += 4
+	offset += 8
 
 	// The remainder is considered the payload.
 	if len(buf) > offset {
@@ -846,31 +858,34 @@ func DeserialiseUERRPacket(
 	return bh, h, nil
 }
 
-// SerialiseUSERMessageHeader writes the USERMessageHeader into a 12-byte slice
+// SerialiseUSERMessageHeader writes the USERMessageHeader into a 16-byte slice
 func (h *UserMsgHeader) SerialiseUSERMessageHeader() ([]byte, error) {
-	buf := make([]byte, 12)
+	buf := make([]byte, 16)
 	binary.LittleEndian.PutUint32(buf[0:4], h.FromUserID)
 	binary.LittleEndian.PutUint32(buf[4:8], h.ToUserID)
 	binary.LittleEndian.PutUint32(buf[8:12], h.ToNodeID)
+	binary.LittleEndian.PutUint32(buf[12:16], h.OriginNodeID)
 	return buf, nil
 }
 
-// DeserialiseUSERMessageHeader parses a 12-byte slice into USERMessageHeader
+// DeserialiseUSERMessageHeader parses a 16-byte slice into USERMessageHeader
 func (h *UserMsgHeader) DeserialiseUSERMessageHeader(buf []byte) error {
-	if len(buf) < 12 {
-		return fmt.Errorf("buffer too short for USERMessageHeader: need 12, got %d", len(buf))
+	if len(buf) < 16 {
+		return fmt.Errorf("buffer too short for USERMessageHeader: need 16, got %d", len(buf))
 	}
 	h.FromUserID = binary.LittleEndian.Uint32(buf[0:4])
 	h.ToUserID = binary.LittleEndian.Uint32(buf[4:8])
 	h.ToNodeID = binary.LittleEndian.Uint32(buf[8:12])
+	h.OriginNodeID = binary.LittleEndian.Uint32(buf[12:16])
 	return nil
 }
 
 // CreateUSERMessagePacket builds a full packet containing BaseHeader + USERMessageHeader + payload
 func CreateUSERMessagePacket(
-	srcID, senderUserID, destUserID, destNodeID, nextHopID uint32,
+	originNodeID, srcID, senderUserID, destUserID, destNodeID, nextHopID uint32,
 	hopCount uint8,
 	payload []byte,
+	flags uint8,
 	packetID ...uint32,
 ) ([]byte, uint32, error) {
 	// pick or generate a packet ID
@@ -887,16 +902,17 @@ func CreateUSERMessagePacket(
 		SrcNodeID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_USER_MSG,
-		Flags:      0x0,
+		Flags:      flags,
 		HopCount:   hopCount,
 		Reserved:   0x0,
 	}
 
 	// construct USERMessageHeader
 	mh := UserMsgHeader{
-		FromUserID: senderUserID,
-		ToUserID:   destUserID,
-		ToNodeID:   destNodeID,
+		FromUserID:   senderUserID,
+		ToUserID:     destUserID,
+		ToNodeID:     destNodeID,
+		OriginNodeID: originNodeID,
 	}
 
 	// serialize headers
@@ -946,14 +962,14 @@ func DeserialiseUSERMessagePacket(
 
 	// USERMessageHeader is next 12 bytes
 	ofs := 16
-	if len(buf) < ofs+12 {
-		return bh, mh, nil, fmt.Errorf("buffer too short for USERMessageHeader: need %d, got %d", ofs+12, len(buf))
+	if len(buf) < ofs+16 {
+		return bh, mh, nil, fmt.Errorf("buffer too short for USERMessageHeader: need %d, got %d", ofs+16, len(buf))
 	}
-	if err := mh.DeserialiseUSERMessageHeader(buf[ofs : ofs+12]); err != nil {
+	if err := mh.DeserialiseUSERMessageHeader(buf[ofs : ofs+16]); err != nil {
 		return bh, mh, nil, err
 	}
 
 	// remainder is payload
-	payload := buf[ofs+12:]
+	payload := buf[ofs+16:]
 	return bh, mh, payload, nil
 }
