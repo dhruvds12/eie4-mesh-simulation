@@ -304,7 +304,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 
 	if flags == packet.REQ_ACK {
 		r.eventBus.Publish(eventBus.Event{
-			Type:       eventBus.EventRequestedACK,
+			Type: eventBus.EventRequestedACK,
 		})
 		expire := time.Now().Add(10 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
@@ -367,7 +367,7 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 
 	if flags == packet.REQ_ACK {
 		r.eventBus.Publish(eventBus.Event{
-			Type:       eventBus.EventRequestedACK,
+			Type: eventBus.EventRequestedACK,
 		})
 		expire := time.Now().Add(10 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
@@ -465,7 +465,9 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 			delete(r.pendingTxs, bh.PacketID)
 		}
 		r.pendingMu.Unlock()
-		r.handleUserMessage(net, node, receivedPacket)
+		if bh.DestNodeID == r.ownerID {
+			r.handleUserMessage(net, node, receivedPacket)
+		}
 	default:
 		// not a routing message
 		log.Printf("[sim] Node %d (router) -> received non-routing message: %d\n", r.ownerID, bh.PacketType)
@@ -955,7 +957,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
 	if bh.Flags == packet.REQ_ACK {
 		r.eventBus.Publish(eventBus.Event{
-			Type:       eventBus.EventRequestedACK,
+			Type: eventBus.EventRequestedACK,
 		})
 		// log.Printf("{Implicit ACK} Node %d: overheard forward from %d => implicit ack for msgID=%d", r.ownerID, originID, msg.GetID())
 		// TODO: need to wait for an explicit ACK request from sender (simplified)
@@ -1067,7 +1069,7 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 
 	if bh.Flags == packet.REQ_ACK {
 		r.eventBus.Publish(eventBus.Event{
-			Type:       eventBus.EventRequestedACK,
+			Type: eventBus.EventRequestedACK,
 		})
 
 		expire := time.Now().Add(3 * time.Second) // e.g. 3s
@@ -1108,7 +1110,7 @@ func (r *AODVRouter) HandleDataAck(receivedPacket []byte) {
 		log.Printf("[ACK] Node %d: received ACK for msgID=%d\n", r.ownerID, ack.OriginalPacketID)
 		delete(r.pendingTxs, ack.OriginalPacketID)
 		r.eventBus.Publish(eventBus.Event{
-			Type:       eventBus.EventReceivedDataAck,
+			Type: eventBus.EventReceivedDataAck,
 		})
 	}
 	r.pendingMu.Unlock()
