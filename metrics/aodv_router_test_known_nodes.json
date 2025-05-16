@@ -1,31 +1,32 @@
 {
-  "total_sent": 88,
+  "total_sent": 117,
   "sent_by_type": {
-    "4": 88
+    "4": 117
   },
-  "total_control_sent": 20,
+  "total_control_sent": 25,
   "control_sent_by_type": {
+    "3": 5,
     "6": 20
   },
-  "total_delivered": 84,
+  "total_delivered": 114,
   "delivered_by_type": {
-    "4": 84
+    "4": 114
   },
-  "total_control_delivered": 0,
-  "collisions": 42,
+  "total_control_delivered": 160,
+  "collisions": 22,
   "collisions_by_type": {
-    "4": 38,
-    "6": 3,
-    "7": 1
+    "4": 4,
+    "6": 14,
+    "7": 4
   },
-  "hop_sum": 79551295157,
-  "hop_samples": 84,
-  "total_lost": 74,
-  "no_route": 0,
+  "hop_sum": 123473202133,
+  "hop_samples": 114,
+  "total_lost": 5,
+  "no_route": 3,
   "no_route_user": 0,
   "user_not_at_node": 0,
-  "received_ack": 14,
-  "requested_ack": 88
+  "received_ack": 35,
+  "requested_ack": 119
 }
 
 ALL ACKS
@@ -55,7 +56,7 @@ startup_delay: 30s
 traffic:
   pattern: poisson
   msg_per_node_per_min: 10 #10
-  restrict_to_known_routes: false 
+  restrict_to_known_routes: true 
   packet_mix:
     DATA:      1.0
     USER_MSG:  0.0
@@ -63,7 +64,7 @@ traffic:
 
 # ────────────── routing / MAC ───────────────────
 routing:
-  router_type: 1                # 0 - AODV | 1 - flood | Default - AODV
+  router_type: 0                # 0 - AODV | 1 - flood | Default - AODV
   max_hops: 5                   # TODO NOT ACTUALLY A WORKING FIELD
   reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
   rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
@@ -79,4 +80,4 @@ csma:
   be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/flood_router_test.json
+  metrics_file: metrics/test.json
