@@ -205,11 +205,21 @@ func (r *Runner) emitRandomTraffic() {
 		}
 	}
 
+	var ackFlag uint8
+    if r.shouldRequestAck() {
+        ackFlag = packet.REQ_ACK
+    } else {
+        ackFlag = 0
+    }
+
+
+
+
 	// pick packet type according to mix
 	pt := choosePacket(r.sc.Traffic.PacketMix)
 	switch pt {
 	case "DATA":
-		from.SendData(r.net, to.GetID(), "hello", packet.REQ_ACK)
+		from.SendData(r.net, to.GetID(), "hello", ackFlag)
 	case "USER_MSG":
 		users := to.GetConnectedUsers()
 		if len(users) == 0 {
@@ -218,7 +228,7 @@ func (r *Runner) emitRandomTraffic() {
 		du := users[rand.Intn(len(users))]
 		su := uint32(rand.Int31())
 		from.AddConnectedUser(su)
-		from.SendUserMessage(r.net, su, du, "ping", packet.REQ_ACK)
+		from.SendUserMessage(r.net, su, du, "ping", ackFlag)
 	case "BROADCAST":
 		from.SendBroadcastInfo(r.net)
 	}
@@ -235,4 +245,9 @@ func choosePacket(m map[string]float64) string {
 		}
 	}
 	return "DATA"
+}
+
+func (r *Runner) shouldRequestAck() bool {
+    // rand.Float64() returns [0.0,1.0)
+    return rand.Float64() < r.sc.Traffic.Acks
 }
