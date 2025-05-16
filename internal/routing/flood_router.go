@@ -53,6 +53,15 @@ type FloodRouter struct {
 	pendingQuitChan chan struct{}
 
 	broadcastQuitChan chan struct{}
+
+	txQueue chan tx
+}
+
+type tx struct {
+	net    mesh.INetwork
+	sender mesh.INode
+	pkt    []byte
+	pktID  uint32
 }
 
 // Default config values (mirrors AODV defaults so that the MAC behaviour is
@@ -83,7 +92,7 @@ type pendingTx struct {
 
 // NewFloodRouter constructs a managed‑flood router bound to a specific node ID.
 func NewFloodRouter(ownerID uint32, bus *eventBus.EventBus) *FloodRouter {
-	return &FloodRouter{
+	r := &FloodRouter{
 		ownerID:           ownerID,
 		seenMsgIDs:        make(map[uint32]bool),
 		gut:               make(map[uint32]UserEntry),
@@ -98,7 +107,16 @@ func NewFloodRouter(ownerID uint32, bus *eventBus.EventBus) *FloodRouter {
 		broadcastQuitChan: make(chan struct{}),
 		pending:           make(map[uint32]pendingTx),
 		pendingQuitChan:   make(chan struct{}),
+		txQueue: make(chan tx, 32),
 	}
+	go r.txWorker()
+    return r
+}
+
+func (r *FloodRouter) txWorker() {
+    for t := range r.txQueue {
+        r.BroadcastMessageCSMA(t.net, t.sender, t.pkt, t.pktID)
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -113,7 +131,7 @@ func (r *FloodRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint
 		return
 	}
 	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_DATA})
-	r.BroadcastMessageCSMA(net, sender, pkt, pktID)
+	r.txQueue <- tx{net, sender, pkt, pktID}
 	r.trackIfAckRequested(pktID, pkt, flags)
 }
 
@@ -131,7 +149,7 @@ func (r *FloodRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, send
 		return
 	}
 	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_USER_MSG})
-	r.BroadcastMessageCSMA(net, sender, pkt, pktID)
+	r.txQueue <- tx{net, sender, pkt, pktID}
 	r.trackIfAckRequested(pktID, pkt, flags)
 }
 
@@ -222,7 +240,7 @@ func (r *FloodRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) 
 		log.Printf("[FloodRouter] Node %d: failed to create BROADCAST_INFO packet: %v", r.ownerID, err)
 		return
 	}
-	r.BroadcastMessageCSMA(net, node, pkt, pktID)
+	r.txQueue <- tx{net, node, pkt, pktID}
 	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventControlMessageSent, PacketType: packet.PKT_BROADCAST_INFO})
 }
 
@@ -269,7 +287,7 @@ func (r *FloodRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 
 			// retransmit outside the lock
 			for _, p := range retries {
-				r.BroadcastMessageCSMA(net, node, p.pkt, p.pktID)
+				r.txQueue <- tx{net, node, p.pkt, p.pktID}
 			}
 		}
 	}
