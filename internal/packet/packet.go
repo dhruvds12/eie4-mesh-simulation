@@ -28,11 +28,14 @@ const (
 	REQ_ACK      uint8 = 0x04
 )
 
-const MaxPacketSize = 255
+const (
+	MaxPacketSize = 255 // bytes – LoRa airtime optimiser
 
-const BROADCAST_ADDR uint32 = 0xFFFFFFFF
+	BROADCAST_ADDR uint32 = 0xFFFFFFFF     // everyone hears
+	BROADCAST_NH   uint32 = BROADCAST_ADDR // alias used by flood router
 
-const MAX_HOPS = 5
+	MAX_HOPS = 5 // safety cap to avoid routing loops
+)
 
 type BaseHeader struct {
 	DestNodeID uint32 // destination of the hop not the route
@@ -106,6 +109,8 @@ type UserMsgHeader struct {
 	ToNodeID     uint32
 	OriginNodeID uint32
 }
+
+func ReadUint32(b []byte) uint32 { return binary.LittleEndian.Uint32(b) }
 
 func (bh *BaseHeader) SerialiseBaseHeader() ([]byte, error) {
 	buf := make([]byte, 16)
