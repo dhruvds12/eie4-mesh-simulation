@@ -74,9 +74,10 @@ type AODVRouter struct {
 	RouteMu           sync.RWMutex
 	RouteTable        map[uint32]*RouteEntry // key = destination ID
 	seenMu            sync.RWMutex
-	seenMsgIDs        map[uint32]bool                    // deduplicate RREQ/RREP
-	dataQueue         map[uint32][]DataQueueEntry        // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
-	userMessageQueue  map[uint32][]userMessageQueueEntry // queue of data to send after route is established //TODO: NEED TO CHANGE TO UINT32
+	seenMsgIDs        map[uint32]bool             // deduplicate RREQ/RREP
+	dataQueue         map[uint32][]DataQueueEntry // queue of data to send after route is established
+	dataMu            sync.RWMutex
+	userMessageQueue  map[uint32][]userMessageQueueEntry // queue of data to send after route is established
 	queueMu           sync.RWMutex
 	pendingTxs        map[uint32]PendingTx
 	pendingMu         sync.RWMutex
@@ -87,6 +88,7 @@ type AODVRouter struct {
 	gut               map[uint32]UserEntry
 	gutMu             sync.RWMutex
 	lastUsersShadow   map[uint32]bool
+	shadowMu          sync.RWMutex // TODO: is this required
 	txQueue           chan outgoingTx
 
 	CcaWindow      time.Duration
@@ -97,9 +99,14 @@ type AODVRouter struct {
 	BeUnit         time.Duration
 	BeMaxExp       int
 
+	paramsMu       sync.RWMutex
 	ReplyThreshold int // only send RREP/UREP if my route.hops > threshold
 	RreqHopLimit   int // max hops we forward a RREQ
 	UreqHopLimit   int // max hops we forward a UREQ
+
+	broadcastOnce sync.Once
+	pendingOnce   sync.Once
+	txOnce        sync.Once
 }
 
 // NewAODVRouter constructs a router for a specific node
@@ -136,9 +143,11 @@ func NewAODVRouter(ownerID uint32, bus *eventBus.EventBus) *AODVRouter {
 }
 
 func (r *AODVRouter) SetRoutingParams(th, rreqLim, ureqLim int) {
+	r.paramsMu.Lock()
 	r.ReplyThreshold = th
 	r.RreqHopLimit = rreqLim
 	r.UreqHopLimit = ureqLim
+	r.paramsMu.Unlock()
 }
 
 // ------------------------------------------------------------
@@ -244,15 +253,15 @@ func (r *AODVRouter) StartBroadcastTicker(net mesh.INetwork, node mesh.INode) {
 
 // Stop the pendingTxChecker
 func (r *AODVRouter) StopPendingTxChecker() {
-	close(r.pendingQuitChan)
+	r.pendingOnce.Do(func() { close((r.pendingQuitChan)) })
 }
 
 func (r *AODVRouter) StopBroadcastTicker() {
-	close(r.broadcastQuitChan)
+	r.broadcastOnce.Do(func() { close(r.broadcastQuitChan) })
 }
 
 func (r *AODVRouter) StopTxWorker() {
-	close(r.txQuitChan)
+	r.txOnce.Do(func() { close(r.txQuitChan) })
 }
 
 // -- IRouter methods --
@@ -270,7 +279,9 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 			destUserID: 0,
 			flags:      flags,
 		}
+		r.dataMu.Lock()
 		r.dataQueue[destID] = append(r.dataQueue[destID], dqe)
+		r.dataMu.Unlock()
 		r.initiateRREQ(net, sender, destID)
 		return
 	}
@@ -345,7 +356,9 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 			destUserID: destUserID,
 			flags:      flags,
 		}
+		r.dataMu.Lock()
 		r.dataQueue[userEntry.NodeID] = append(r.dataQueue[userEntry.NodeID], dqe)
+		r.dataMu.Unlock()
 		r.initiateRREQ(net, sender, userEntry.NodeID)
 		return
 	}
@@ -520,6 +533,8 @@ func (r *AODVRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 		now[u] = true
 	}
 
+	r.shadowMu.Lock()
+
 	var added, removed []uint32
 	for u := range now {
 		if !r.lastUsersShadow[u] {
@@ -531,6 +546,7 @@ func (r *AODVRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 			removed = append(removed, u)
 		}
 	}
+	r.shadowMu.Unlock()
 
 	pkt, pid, err := packet.CreateDiffBroadcastInfoPacket(
 		r.ownerID, r.ownerID, added, removed, 0,
@@ -543,7 +559,9 @@ func (r *AODVRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 			PacketType: packet.PKT_BROADCAST_INFO,
 		})
 	}
+	r.shadowMu.Lock()
 	r.lastUsersShadow = now
+	r.shadowMu.Unlock()
 }
 
 func (r *AODVRouter) AddRouteEntry(dest, nextHop uint32, hopCount int) {
@@ -688,8 +706,12 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 		return
 	}
 
+	r.paramsMu.RLock()
+	th := r.ReplyThreshold
+	r.paramsMu.RUnlock()
+
 	// If we have a route to the destination, we can send RREP
-	if route, ok := r.getRoute(rh.RREQDestNodeID); ok && route.HopCount > r.ReplyThreshold {
+	if route, ok := r.getRoute(rh.RREQDestNodeID); ok && route.HopCount > th {
 		r.eventBus.Publish(eventBus.Event{
 			Type: eventBus.EventControlMessageDelivered,
 		})
@@ -697,7 +719,11 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 		return
 	}
 
-	if int(bh.HopCount) >= r.RreqHopLimit {
+	r.paramsMu.RLock()
+	rhl := r.RreqHopLimit
+	r.paramsMu.RUnlock()
+
+	if int(bh.HopCount) >= rhl {
 		return // drop – do not propagate further
 	}
 
@@ -756,8 +782,15 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 		r.eventBus.Publish(eventBus.Event{
 			Type: eventBus.EventControlMessageDelivered,
 		})
+		// create a deep copy of the dataQueue to prevent long mutex lock
+		var tempDataQueue []DataQueueEntry
+		r.dataMu.Lock()
+		tempDataQueue = append(tempDataQueue, r.dataQueue[rreph.OriginNodeID]...)
+		delete(r.dataQueue, rreph.OriginNodeID)
+		r.dataMu.Unlock()
+
 		// send any queued data
-		for _, dqe := range r.dataQueue[rreph.OriginNodeID] {
+		for _, dqe := range tempDataQueue {
 			if dqe.packetType == packet.PKT_DATA {
 
 				r.SendData(net, node, rreph.OriginNodeID, dqe.payload, dqe.flags)
@@ -767,7 +800,6 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 				r.SendUserMessage(net, node, dqe.sendUserID, dqe.destUserID, dqe.payload, dqe.flags)
 			}
 		}
-		delete(r.dataQueue, rreph.OriginNodeID)
 		return
 	}
 
@@ -1195,8 +1227,12 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 
 	// If I have a path to user reply
 	if n, ok := r.hasUserEntry(uh.UREQUserID); ok {
+		r.paramsMu.RLock()
+		th := r.ReplyThreshold
+		r.paramsMu.RUnlock()
+
 		route, have := r.getRoute(n.NodeID)
-		if have && route.HopCount > r.ReplyThreshold {
+		if have && route.HopCount > th {
 			r.eventBus.Publish(eventBus.Event{
 				Type: eventBus.EventControlMessageDelivered,
 			})
@@ -1233,7 +1269,11 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 		// }
 	}
 
-	if int(bh.HopCount) >= r.UreqHopLimit {
+	r.paramsMu.RLock()
+	uhl := r.UreqHopLimit
+	r.paramsMu.RUnlock()
+
+	if int(bh.HopCount) >= uhl {
 		return
 	}
 

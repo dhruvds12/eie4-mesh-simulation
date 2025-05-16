@@ -1,8 +1,8 @@
 {
   "total_sent": 12,
   "sent_by_type": {
-    "18": 4,
-    "4": 8
+    "18": 6,
+    "4": 6
   },
   "total_control_sent": 7,
   "control_sent_by_type": {
@@ -12,16 +12,15 @@
   },
   "total_delivered": 12,
   "delivered_by_type": {
-    "18": 4,
-    "4": 8
+    "18": 6,
+    "4": 6
   },
   "total_control_delivered": 16,
-  "collisions": 12,
+  "collisions": 1,
   "collisions_by_type": {
-    "6": 1,
-    "7": 11
+    "15": 1
   },
-  "hop_sum": 14936108031,
+  "hop_sum": 9583334083,
   "hop_samples": 12,
   "total_lost": 0,
   "no_route": 0,
