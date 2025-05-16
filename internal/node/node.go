@@ -33,10 +33,17 @@ type nodeImpl struct {
 }
 
 // NewNode creates a new Node with a given ID.
-func NewNode(lat, long float64, bus *eventBus.EventBus) mesh.INode {
+func NewNode(lat, long float64, bus *eventBus.EventBus, routerType routing.RouterType) mesh.INode {
 	nodeID := rand.Int31()
 	var nodeIdInt = uint32(nodeID)
 	log.Printf("[sim] Created new node ID: %d, x: %f, y: %f", nodeID, lat, long)
+	var router routing.IRouter
+	switch routerType {
+	case routing.AODVROUTER:
+		router = routing.NewAODVRouter(nodeIdInt, bus)
+	case routing.FLOORROUTER:
+		router = routing.NewFloodRouter(nodeIdInt, bus)
+	}
 	return &nodeImpl{
 		id:             nodeIdInt,
 		coordinates:    mesh.CreateCoordinates(lat, long),
@@ -44,7 +51,7 @@ func NewNode(lat, long float64, bus *eventBus.EventBus) mesh.INode {
 		quit:           make(chan struct{}),
 		seenBroadcasts: make(map[string]bool),
 		neighbors:      make(map[uint32]bool),
-		router:         routing.NewAODVRouter(nodeIdInt, bus),
+		router:         router,
 		eventBus:       bus,
 		connectedUsers: make(map[uint32]bool),
 	}
@@ -60,11 +67,10 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 	log.Printf("Node %d: started.\n", n.id)
 	defer log.Printf("Node %d: stopped.\n", n.id)
 
-	if aodv, ok := n.router.(*routing.AODVRouter); ok {
-		aodv.StartPendingTxChecker(net, n)
-		aodv.StartBroadcastTicker(net, n)
-
-		aodv.SendDiffBroadcastInfo(net, n)
+	if router := n.router; router != nil {
+		router.StartPendingTxChecker(net, n)
+		router.StartBroadcastTicker(net, n)
+		router.SendDiffBroadcastInfo(net, n)
 	}
 
 	for {
@@ -72,10 +78,10 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 		case msg := <-n.messages:
 			n.HandleMessage(net, msg)
 		case <-n.quit:
-			if aodv, ok := n.router.(*routing.AODVRouter); ok {
-				aodv.StopPendingTxChecker()
-				aodv.StopBroadcastTicker()
-				aodv.StopTxWorker()
+			if router := n.router; router != nil {
+				router.StopPendingTxChecker()
+				router.StopBroadcastTicker()
+				router.StopTxWorker()
 			}
 			return
 		}
@@ -219,7 +225,7 @@ func (n *nodeImpl) PrintNodeDetails() {
 	fmt.Printf("    - %T\n", n.router)
 	// print out routing table
 	fmt.Println("  Routing Table:")
-	r := n.router.(*routing.AODVRouter)
+	r := n.router
 	r.PrintRoutingTable()
 
 	fmt.Println("====================================")
@@ -278,6 +284,17 @@ func (n *nodeImpl) SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxB
 		aodv.BackoffScheme = BackoffScheme
 		aodv.BeUnit = BEUnit
 		aodv.BeMaxExp = BEMaxExp
+		return ok
+	}
+
+	if floodRouter, ok := n.GetRouter().(*routing.FloodRouter); ok {
+		floodRouter.CcaWindow = CCAWindow
+		floodRouter.CcaSample = CCASample
+		floodRouter.InitialBackoff = InitialBackoff
+		floodRouter.MaxBackoff = MaxBackoff
+		floodRouter.BackoffScheme = BackoffScheme
+		floodRouter.BeUnit = BEUnit
+		floodRouter.BeMaxExp = BEMaxExp
 		return ok
 	}
 

@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"errors"
 	"log"
 	"math"
 	"math/rand"
@@ -13,6 +14,7 @@ import (
 	"mesh-simulation/internal/network"
 	"mesh-simulation/internal/node"
 	"mesh-simulation/internal/packet"
+	"mesh-simulation/internal/routing"
 )
 
 type Runner struct {
@@ -33,7 +35,11 @@ func (r *Runner) Run() error {
 	rand.Seed(r.sc.Seed)
 	// start network goroutine
 	// r.wg.Add(1)
-	// go func() { defer r.wg.Done(); r.net.Run() }()
+	if r.sc.Routing.RouterType == 1 && r.sc.Traffic.RestrictToKnownRoutes {
+		log.Print("RestrictToKnownRoutes MUST be set to false if router is FLOOD")
+		return errors.New("RestrictToKnownRoutes MUST be set to false if router is FLOOD")
+	}
+
 	go r.net.Run()
 
 	// ── build nodes & users ────────────────────────────────────────────────
@@ -65,7 +71,7 @@ func (r *Runner) Run() error {
 		for cCol := 0; cCol < cols && idx < r.sc.Nodes.Count; cCol++ {
 			lat := float64(rRow) * side / float64(rows-1)
 			lng := float64(cCol) * side / float64(cols-1)
-			n := node.NewNode(lat, lng, r.bus)
+			n := node.NewNode(lat, lng, r.bus, routing.RouterType(r.sc.Routing.RouterType))
 
 			if ok := n.SetRouterConstants(
 				r.sc.CSMA.CCAWindow,

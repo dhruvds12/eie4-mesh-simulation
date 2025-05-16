@@ -28,7 +28,7 @@ func CreateNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 		}
 
 		// Create a new node using the provided coordinates and event bus.
-		newNode := node.NewNode(payload.Lat, payload.Long, bus)
+		newNode := node.NewNode(payload.Lat, payload.Long, bus, 0)
 		// Add the node to the network.
 		net.Join(newNode)
 

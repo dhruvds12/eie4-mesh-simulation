@@ -26,6 +26,7 @@ type TrafficCfg struct {
 }
 
 type RoutingCfg struct {
+	RouterType         int `yaml:"router_type" json:"router_type"`
 	MaxHops            int `yaml:"max_hops" json:"max_hops"`
 	ReplyThresholdHops int `yaml:"reply_threshold_hops"  json:"reply_threshold_hops"`
 	RREQHopLimit       int `yaml:"rreq_hop_limit"        json:"rreq_hop_limit"`

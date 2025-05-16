@@ -4,6 +4,9 @@ import (
 	"mesh-simulation/internal/mesh"
 )
 
+var _ IRouter = (*AODVRouter)(nil)
+var _ IRouter = (*FloodRouter)(nil)
+
 // IRouter is the interface that all routing algorithms must implement.
 type IRouter interface {
 	// Called by the node to send data to destID
@@ -28,6 +31,8 @@ type IRouter interface {
 	// Start the router's Tx check go routine
 	StartPendingTxChecker(net mesh.INetwork, node mesh.INode)
 
+	StartBroadcastTicker(net mesh.INetwork, node mesh.INode)
+
 	// Stop the router's Tx check go routine
 	StopPendingTxChecker()
 
@@ -46,3 +51,10 @@ type IRouter interface {
 
 	SetRoutingParams(th, rreqLim, ureqLim int)
 }
+
+type RouterType int
+
+const (
+	AODVROUTER RouterType = 0x00
+	FLOORROUTER RouterType = 0x01
+)
