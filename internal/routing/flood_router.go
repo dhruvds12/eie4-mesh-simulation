@@ -107,16 +107,30 @@ func NewFloodRouter(ownerID uint32, bus *eventBus.EventBus) *FloodRouter {
 		broadcastQuitChan: make(chan struct{}),
 		pending:           make(map[uint32]pendingTx),
 		pendingQuitChan:   make(chan struct{}),
-		txQueue: make(chan tx, 32),
+		txQueue:           make(chan tx, 32),
 	}
 	go r.txWorker()
-    return r
+	return r
 }
 
 func (r *FloodRouter) txWorker() {
-    for t := range r.txQueue {
-        r.BroadcastMessageCSMA(t.net, t.sender, t.pkt, t.pktID)
-    }
+	for t := range r.txQueue {
+		r.BroadcastMessageCSMA(t.net, t.sender, t.pkt, t.pktID)
+	}
+}
+
+func (r *FloodRouter) tryEnqueue(t tx) bool {
+	select {
+	case r.txQueue <- t: // queue had room – OK
+		return true
+	default: // queue full – drop
+		r.eventBus.Publish(eventBus.Event{
+			Type:   eventBus.EventTxQueueDrop,
+			NodeID: r.ownerID,
+			// You could add PacketType if you need finer stats
+		})
+		return false
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -130,8 +144,12 @@ func (r *FloodRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint
 		log.Printf("[FloodRouter] Node %d: failed to create DATA packet: %v", r.ownerID, err)
 		return
 	}
+
+	if !r.tryEnqueue(tx{net, sender, pkt, pktID}) {
+		return
+	}
+
 	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_DATA})
-	r.txQueue <- tx{net, sender, pkt, pktID}
 	r.trackIfAckRequested(pktID, pkt, flags)
 }
 
@@ -148,8 +166,12 @@ func (r *FloodRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, send
 		log.Printf("[FloodRouter] Node %d: failed to create USER_MSG packet: %v", r.ownerID, err)
 		return
 	}
+
+	if !r.tryEnqueue(tx{net, sender, pkt, pktID}) {
+		return
+	}
+
 	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_USER_MSG})
-	r.txQueue <- tx{net, sender, pkt, pktID}
 	r.trackIfAckRequested(pktID, pkt, flags)
 }
 
@@ -240,7 +262,10 @@ func (r *FloodRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) 
 		log.Printf("[FloodRouter] Node %d: failed to create BROADCAST_INFO packet: %v", r.ownerID, err)
 		return
 	}
-	r.txQueue <- tx{net, node, pkt, pktID}
+
+	if !r.tryEnqueue(tx{net, node, pkt, pktID}) {
+		return
+	}
 	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventControlMessageSent, PacketType: packet.PKT_BROADCAST_INFO})
 }
 
@@ -287,7 +312,10 @@ func (r *FloodRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 
 			// retransmit outside the lock
 			for _, p := range retries {
-				r.txQueue <- tx{net, node, p.pkt, p.pktID}
+				// TODO need to drop if the queue is full
+				if !r.tryEnqueue(tx{net, node, p.pkt, p.pktID}) {
+					return
+				}
 			}
 		}
 	}
@@ -376,6 +404,8 @@ func (r *FloodRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, bu
 	if err := bh.DeserialiseBaseHeader(buf); err != nil {
 		return
 	}
+
+	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventControlMessageDelivered, PacketType: packet.PKT_BROADCAST_INFO})
 
 	ofs := 16
 	var dh packet.DiffBroadcastInfoHeader

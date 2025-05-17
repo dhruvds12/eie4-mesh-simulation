@@ -27,6 +27,7 @@ const (
 	EventUserNotAtNode           EventType = "USER_NOT_ATNODE"
 	EventRequestedACK            EventType = "REQUESTED_ACK"
 	EventReceivedDataAck         EventType = "RECEIVED_ACK"
+	EventTxQueueDrop             EventType = "TX_QUEUE_DROP"
 )
 
 // RouteEntry represents an entry in the routing table.

@@ -124,7 +124,7 @@ func NewAODVRouter(ownerID uint32, bus *eventBus.EventBus) *AODVRouter {
 		gut:               make(map[uint32]UserEntry), // global user table -> has the location of a user in the mesh network
 		userMessageQueue:  make(map[uint32][]userMessageQueueEntry),
 		lastUsersShadow:   make(map[uint32]bool),
-		txQueue:           make(chan outgoingTx, 32),
+		txQueue:           make(chan outgoingTx, 32), // previously 32
 
 		// MAC defaults (will be overwritten by Runner after node creation)
 		CcaWindow:      5 * time.Millisecond,
@@ -311,6 +311,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 		Type:       eventBus.EventMessageSent,
 		PacketType: packet.PKT_DATA,
 	})
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
 
 	if flags == packet.REQ_ACK {
@@ -372,6 +373,7 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 	}
 
 	log.Printf("[sim] Node %d (router) -> Initiating user message to %d via %d\n", r.ownerID, userEntry.NodeID, nextHop)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
 	r.eventBus.Publish(eventBus.Event{
 		Type:       eventBus.EventMessageSent,
@@ -523,6 +525,7 @@ func (r *AODVRouter) SendBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 	}
 	// net.BroadcastMessage(m, node)
 	// r.BroadcastMessageCSMA(net, node, infoPacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: infoPacket, pktID: packetID}
 }
 
@@ -553,6 +556,7 @@ func (r *AODVRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 	)
 	if err == nil {
 		// r.BroadcastMessageCSMA(net, node, pkt, pid)
+		// TODO need to drop if the queue is full
 		r.txQueue <- outgoingTx{net: net, sender: node, pkt: pkt, pktID: pid}
 		r.eventBus.Publish(eventBus.Event{
 			Type:       eventBus.EventControlMessageSent,
@@ -661,6 +665,7 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, buf
 			bh.HopCount+1, bh.PacketID,
 		)
 		// r.BroadcastMessageCSMA(net, node, fwd, pid)
+		// TODO need to drop if the queue is full
 		r.txQueue <- outgoingTx{net: net, sender: node, pkt: fwd, pktID: pid}
 	}
 }
@@ -678,6 +683,7 @@ func (r *AODVRouter) initiateRREQ(net mesh.INetwork, sender mesh.INode, destID u
 		Type:       eventBus.EventControlMessageSent,
 		PacketType: packet.PKT_RREQ,
 	})
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: rreqPacket, pktID: packetID}
 }
 
@@ -734,6 +740,7 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	log.Printf("[sim] [RREQ FORWARD] Node %d: forwarding RREQ for %d (hop count %d)\n", r.ownerID, rh.RREQDestNodeID, bh.HopCount)
 	// net.BroadcastMessage(fwdMsg, node)
 	// r.BroadcastMessageCSMA(net, node, fwdRREQ, packetId)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: fwdRREQ, pktID: packetId}
 }
 
@@ -756,6 +763,7 @@ func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, destRREP, sour
 		Type:       eventBus.EventControlMessageSent,
 		PacketType: packet.PKT_RREP,
 	})
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: rrepPacket, pktID: packetID}
 }
 
@@ -822,6 +830,7 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 	log.Printf("[RREP FORWARD] Node %d: forwarding RREP to %d via %d\n", r.ownerID, rreph.RREPDestNodeID, reverseRoute.NextHop)
 	// net.BroadcastMessage(fwdRrep, node)
 	// r.BroadcastMessageCSMA(net, node, rrepPacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: rrepPacket, pktID: packetID}
 }
 
@@ -836,6 +845,7 @@ func (r *AODVRouter) sendRERR(net mesh.INetwork, node mesh.INode, to uint32, dat
 	log.Printf("[sim] Node %d: sending RERR to %d about broken route for %d.\n", r.ownerID, to, dataDest)
 	// net.BroadcastMessage(rerrMsg, node)
 	// r.BroadcastMessageCSMA(net, node, rerrPacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: rerrPacket, pktID: packetID}
 	r.eventBus.Publish(eventBus.Event{
 		Type:       eventBus.EventControlMessageSent,
@@ -899,6 +909,7 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, receivedPack
 	log.Printf("[sim] Node %d: sending RERR to %d about broken route for %d.\n", r.ownerID, nexthop, rerrHeader.OriginalDestNodeID)
 	// net.BroadcastMessage(rerrMsg, node)
 	// r.BroadcastMessageCSMA(net, node, rerrPacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: rerrPacket, pktID: packetID}
 	// Message source is in the payload, use existing route to forward RERR
 	// This is a simplification, in real AODV we might need to store the "previous hop" for each route
@@ -983,7 +994,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	log.Printf("[sim] Node %d: forwarding DATA from %d to %d via %d\n", r.ownerID, bh.SrcNodeID, dest, route.NextHop)
 	// net.BroadcastMessage(fwdMsg, node)
 	// r.BroadcastMessageCSMA(net, node, dataPacket, packetID)
-
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: dataPacket, pktID: packetID}
 
 	// Implicit ACK: if the next hop is the intended recipient, we can assume the data was received
@@ -1097,6 +1108,7 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	}
 	log.Printf("[USER MSG FORWARD] Node %d forwarding user msg for %d\n", r.ownerID, dest)
 	// r.BroadcastMessageCSMA(net, node, userMessagePacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: userMessagePacket, pktID: packetID}
 
 	if bh.Flags == packet.REQ_ACK {
@@ -1157,6 +1169,7 @@ func (r *AODVRouter) initiateUREQ(net mesh.INetwork, sender mesh.INode, targetUs
 	log.Printf("[sim] [UREQ init] Node %d (router) -> initiating UREQ for %d (hop count %d)\n", r.ownerID, targetUser, 0)
 	// net.BroadcastMessage(rreqMsg, sender)
 	// r.BroadcastMessageCSMA(net, sender, rreqPacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: ureqPacket, pktID: packetID}
 	r.eventBus.Publish(eventBus.Event{
 		Type:       eventBus.EventControlMessageSent,
@@ -1173,6 +1186,7 @@ func (r *AODVRouter) initiateUREP(net mesh.INetwork, sender mesh.INode, destID, 
 	log.Printf("[sim] [UREP init] Node %d (router) -> initiating UREP for %d (hop count %d)\n", r.ownerID, destID, 0)
 	// net.BroadcastMessage(rreqMsg, sender)
 	// r.BroadcastMessageCSMA(net, sender, rreqPacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: urepPacket, pktID: packetID}
 
 }
@@ -1186,6 +1200,7 @@ func (r *AODVRouter) initiateUERR(net mesh.INetwork, sender mesh.INode, destNode
 	log.Printf("[sim] [UERR init] Node %d (router) -> initiating UERR for %d (hop count %d)\n", r.ownerID, destNodeID, 0)
 	// net.BroadcastMessage(rreqMsg, sender)
 	// r.BroadcastMessageCSMA(net, sender, rreqPacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: uerrPacket, pktID: packetID}
 	r.eventBus.Publish(eventBus.Event{
 		Type:       eventBus.EventControlMessageSent,
@@ -1217,6 +1232,7 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 		log.Printf("[sim] [UREQ] Node %d: has user connected %d (hop count %d), sending to origin %d\n", r.ownerID, uh.UREQUserID, bh.HopCount+1, uh.OriginNodeID)
 		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, r.ownerID, uh.UREQUserID, 0, 0)
 		// r.BroadcastMessageCSMA(net, node, reply, pid)
+		// TODO need to drop if the queue is full
 		r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
 		r.eventBus.Publish(eventBus.Event{
 			Type:       eventBus.EventControlMessageSent,
@@ -1240,6 +1256,7 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 			log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
 			reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, uint8(route.HopCount))
 			// r.BroadcastMessageCSMA(net, node, reply, pid)
+			// TODO need to drop if the queue is full
 			r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
 			r.eventBus.Publish(eventBus.Event{
 				Type:       eventBus.EventControlMessageSent,
@@ -1285,6 +1302,7 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	log.Printf("[sim] [UREQ FORWARD] Node %d: forwarding UREQ for %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
 	// net.BroadcastMessage(fwdMsg, node)
 	// r.BroadcastMessageCSMA(net, node, fwdUREQ, packetId)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: fwdUREQ, pktID: packetID}
 
 }
@@ -1339,6 +1357,7 @@ func (r *AODVRouter) handleUREP(net mesh.INetwork, node mesh.INode, receivedPack
 	log.Printf("[UREP FORWARD] Node %d: forwarding UREP to %d via %d\n", r.ownerID, uh.UREPDestNodeID, reverseRoute.NextHop)
 	// net.BroadcastMessage(fwdMsg, node)
 	// r.BroadcastMessageCSMA(net, node, fwdUREP, packetId)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: fwdUREP, pktID: packetID}
 
 }
@@ -1388,6 +1407,7 @@ func (r *AODVRouter) handleUERR(net mesh.INetwork, node mesh.INode, receivedPack
 	log.Printf("[UERR FORWARD] Node %d: forwarding UERR to %d via %d\n", r.ownerID, uh.OriginNodeID, reverseRoute.NextHop)
 	// net.BroadcastMessage(fwdMsg, node)
 	// r.BroadcastMessageCSMA(net, node, fwdUREP, packetId)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: fwdUERR, pktID: packetID}
 
 }
@@ -1474,6 +1494,7 @@ func (r *AODVRouter) sendDataAck(net mesh.INetwork, node mesh.INode, to uint32, 
 
 	log.Printf("[sim] Node %d: sending DATA_ACK to %d\n", r.ownerID, to)
 	// r.BroadcastMessageCSMA(net, node, ackPacket, packetID)
+	// TODO need to drop if the queue is full
 	r.txQueue <- outgoingTx{net: net, sender: node, pkt: ackPacket, pktID: packetID}
 }
 

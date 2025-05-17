@@ -26,6 +26,7 @@ type Counters struct {
 	UserNotAtNode          uint64           `json:"user_not_at_node"`
 	ReceivedAck            uint64           `json:"received_ack"`
 	RequestedAck           uint64           `json:"requested_ack"`
+	TxQueueDrop            uint64           `json:"tx_queue_drop"`
 }
 
 type Collector struct {
@@ -118,6 +119,12 @@ func (c *Collector) AddRequestedACK() {
 	c.mu.Unlock()
 }
 
+func (c *Collector) AddTxQueueDrop() {
+	c.mu.Lock()
+	c.TxQueueDrop++
+	c.mu.Unlock()
+}
+
 func (c *Collector) Flush(file string) error {
 	c.mu.Lock()
 	snap := Counters{
@@ -134,6 +141,7 @@ func (c *Collector) Flush(file string) error {
 		UserNotAtNode:          c.UserNotAtNode,
 		ReceivedAck:            c.ReceivedAck,
 		RequestedAck:           c.RequestedAck,
+		TxQueueDrop:            c.TxQueueDrop,
 		TotalSentByType:        make(map[uint8]uint64, len(c.TotalSentByType)),
 		TotalControlSentByType: make(map[uint8]uint64, len(c.TotalControlSentByType)),
 		TotalDeliveredByType:   make(map[uint8]uint64, len(c.TotalDeliveredByType)),

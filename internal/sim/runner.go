@@ -172,6 +172,8 @@ func (r *Runner) consumeEvents(ch chan eb.Event) {
 			r.coll.AddRequestedACK()
 		case eb.EventReceivedDataAck:
 			r.coll.AddReceivedDataAck()
+		case eb.EventTxQueueDrop:
+			r.coll.AddTxQueueDrop()
 		}
 	}
 }

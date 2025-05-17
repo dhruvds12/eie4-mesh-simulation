@@ -1,3 +1,34 @@
+{
+  "total_sent": 130,
+  "sent_by_type": {
+    "4": 130
+  },
+  "total_control_sent": 20,
+  "control_sent_by_type": {
+    "6": 20
+  },
+  "total_delivered": 107,
+  "delivered_by_type": {
+    "4": 107
+  },
+  "total_control_delivered": 134,
+  "collisions": 85,
+  "collisions_by_type": {
+    "4": 82,
+    "6": 3
+  },
+  "hop_sum": 107928968291,
+  "hop_samples": 107,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0,
+  "user_not_at_node": 0,
+  "received_ack": 0,
+  "requested_ack": 0,
+  "tx_queue_drop": 0
+}
+
+
 # ────────────── simulation timing ──────────────
 duration: 90s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
@@ -24,7 +55,7 @@ traffic:
   pattern: poisson
   msg_per_node_per_min: 10 #10
   restrict_to_known_routes: false 
-  acks: 1.0                       # out of 1.0
+  acks: 0.0                       # out of 1.0
   packet_mix:
     DATA:      1.0
     USER_MSG:  0.0
