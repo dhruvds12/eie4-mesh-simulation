@@ -1,7 +1,34 @@
+{
+  "total_sent": 12,
+  "sent_by_type": {
+    "4": 12
+  },
+  "total_control_sent": 5,
+  "control_sent_by_type": {
+    "6": 5
+  },
+  "total_delivered": 12,
+  "delivered_by_type": {
+    "4": 12
+  },
+  "total_control_delivered": 0,
+  "collisions": 0,
+  "collisions_by_type": {},
+  "hop_sum": 13517001577,
+  "hop_samples": 12,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0,
+  "user_not_at_node": 0,
+  "received_ack": 12,
+  "requested_ack": 12
+}
+
+
 # ────────────── simulation timing ──────────────
-duration: 90s           # time we KEEP GENERATING traffic #90s
+duration: 30s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
-drain_timeout: 300s      # max extra wall-clock time we allow when end_mode = drain #300
+drain_timeout: 30s      # max extra wall-clock time we allow when end_mode = drain #300
 
 # ────────────── randomness ─────────────────────
 seed: 12345
@@ -10,7 +37,7 @@ seed: 12345
 area_km2: 3.0
 
 nodes:
-  count: 10 #10
+  count: 5 #10
   placement: grid        # uniform | grid | hotspot   (only grid implemented)
   join_delay: 3000ms
 
@@ -22,9 +49,8 @@ startup_delay: 30s
 # ────────────── traffic model ──────────────────
 traffic:
   pattern: poisson
-  msg_per_node_per_min: 10 #10
+  msg_per_node_per_min: 5 #10
   restrict_to_known_routes: false 
-  acks: 1.0                       # out of 1.0
   packet_mix:
     DATA:      1.0
     USER_MSG:  0.0
@@ -48,4 +74,4 @@ csma:
   be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/test.json
+  metrics_file: metrics/flood_router_test.json

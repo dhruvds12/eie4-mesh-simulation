@@ -1,0 +1,19 @@
+"ONLY NODES NO USER MESSAGES"
+{
+  "total_sent": 75,
+  "total_control_sent": 10,
+  "control_sent_by_type": {
+    "6": 10
+  },
+  "total_delivered": 74,
+  "total_control_delivered": 57,
+  "collisions": 8,
+  "collisions_by_type": {
+    "6": 8
+  },
+  "hop_sum": 57461783241,
+  "hop_samples": 74,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0
+}

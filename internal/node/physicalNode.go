@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
+	"time"
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
@@ -111,7 +113,8 @@ func (p *physicalNode) Run(net mesh.INetwork) {
 }
 
 // SendData sends data to a specified destination using the node’s router.
-func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string) {
+// TODO added flags variable not sent over mqtt!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -------------------------------------------------
+func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string, flags uint8) {
 	// p.router.SendDataCSMA(net, p, destID, payload)
 
 	// also need to send a message to the physical node to send a messge using lora
@@ -140,8 +143,8 @@ func (p *physicalNode) SendData(net mesh.INetwork, destID uint32, payload string
 }
 
 // send user message
-func (p *physicalNode) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string) {
-	p.router.SendUserMessage(net, p, userID, destUserID, payload)
+func (p *physicalNode) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string, flags uint8) {
+	p.router.SendUserMessage(net, p, userID, destUserID, payload, flags)
 
 	// Publish to mqtt and tell the node to send a message to the user.
 
@@ -355,4 +358,60 @@ func (p *physicalNode) HasConnectedUser(userID uint32) bool {
 	p.muUsers.RLock()
 	defer p.muUsers.RUnlock()
 	return p.connectedUsers[userID]
+}
+
+func (p *physicalNode) GetRouter() routing.IRouter {
+	return p.router
+}
+
+func (p *physicalNode) SetRouter(r routing.IRouter) {
+	p.router = r
+}
+
+func (p *physicalNode) SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxBackoff time.Duration, BackoffScheme string, BEUnit time.Duration, BEMaxExp int) bool {
+
+	if aodv, ok := p.GetRouter().(*routing.AODVRouter); ok {
+		aodv.CcaWindow = CCAWindow
+		aodv.CcaSample = CCASample
+		aodv.InitialBackoff = InitialBackoff
+		aodv.MaxBackoff = MaxBackoff
+		aodv.BackoffScheme = BackoffScheme
+		aodv.BeUnit = BEUnit
+		aodv.BeMaxExp = BEMaxExp
+		return ok
+	}
+
+	return false
+
+}
+
+func (p *physicalNode) GetRandomKnownNode() (uint32, bool) {
+	aodv, ok := p.router.(*routing.AODVRouter)
+	if !ok {
+		return 0, false
+	}
+	aodv.RouteMu.RLock()
+	defer aodv.RouteMu.RUnlock()
+
+	if len(aodv.RouteTable) == 0 {
+		return 0, false
+	}
+	keys := make([]uint32, 0, len(aodv.RouteTable))
+	for id := range aodv.RouteTable {
+		if id != p.id { // never pick myself
+			keys = append(keys, id)
+		}
+	}
+	if len(keys) == 0 {
+		return 0, false
+	}
+	return keys[rand.Intn(len(keys))], true
+}
+
+func (p *physicalNode) SetRoutingParams(th, rreqLim, ureqLim int) bool {
+	if r, ok := p.router.(*routing.AODVRouter); ok {
+		r.SetRoutingParams(th, rreqLim, ureqLim)
+		return true
+	}
+	return false
 }

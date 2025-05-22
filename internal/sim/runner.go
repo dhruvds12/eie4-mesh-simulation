@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"errors"
 	"log"
 	"math"
 	"math/rand"
@@ -12,6 +13,8 @@ import (
 	"mesh-simulation/internal/metrics"
 	"mesh-simulation/internal/network"
 	"mesh-simulation/internal/node"
+	"mesh-simulation/internal/packet"
+	"mesh-simulation/internal/routing"
 )
 
 type Runner struct {
@@ -32,7 +35,11 @@ func (r *Runner) Run() error {
 	rand.Seed(r.sc.Seed)
 	// start network goroutine
 	// r.wg.Add(1)
-	// go func() { defer r.wg.Done(); r.net.Run() }()
+	if r.sc.Routing.RouterType == 1 && r.sc.Traffic.RestrictToKnownRoutes {
+		log.Print("RestrictToKnownRoutes MUST be set to false if router is FLOOD")
+		return errors.New("RestrictToKnownRoutes MUST be set to false if router is FLOOD")
+	}
+
 	go r.net.Run()
 
 	// ── build nodes & users ────────────────────────────────────────────────
@@ -64,7 +71,28 @@ func (r *Runner) Run() error {
 		for cCol := 0; cCol < cols && idx < r.sc.Nodes.Count; cCol++ {
 			lat := float64(rRow) * side / float64(rows-1)
 			lng := float64(cCol) * side / float64(cols-1)
-			n := node.NewNode(lat, lng, r.bus)
+			n := node.NewNode(lat, lng, r.bus, routing.RouterType(r.sc.Routing.RouterType))
+
+			if ok := n.SetRouterConstants(
+				r.sc.CSMA.CCAWindow,
+				r.sc.CSMA.CCASample,
+				r.sc.CSMA.InitialBackoff,
+				r.sc.CSMA.MaxBackoff,
+				r.sc.CSMA.BackoffScheme,
+				r.sc.CSMA.BEUnit,
+				r.sc.CSMA.BEMaxExp,
+			); !ok {
+				log.Println("Failed to add the CSMA configuration!")
+			}
+
+			if ok := n.SetRoutingParams(
+				r.sc.Routing.ReplyThresholdHops,
+				r.sc.Routing.RREQHopLimit,
+				r.sc.Routing.UREQHopLimit,
+			); !ok {
+				log.Println("Failed to add the Routing Params configuration!")
+			}
+
 			r.net.Join(n)
 			for u := 0; u < r.sc.Users.PerNode; u++ {
 				n.AddConnectedUser(uint32(rand.Int31()))
@@ -95,6 +123,19 @@ func (r *Runner) Run() error {
 	for {
 		select {
 		case <-done:
+			tick.Stop() // stop creating new traffic
+
+			if r.sc.EndMode == "drain" {
+				deadline := time.Now().Add(r.sc.DrainTimeout)
+				for time.Now().Before(deadline) {
+					// if r.net.(*network.NetworkImpl).ActiveTransmissions() == 0 {
+					// 	time.Sleep(30 * time.Millisecond)
+					// 	break
+					// }
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+			log.Printf("Remaining active transmissions on close: %d", r.net.(*network.NetworkImpl).ActiveTransmissions())
 			close(r.quit)
 			if leaver, ok := r.net.(interface{ LeaveAll() }); ok {
 				leaver.LeaveAll()
@@ -112,13 +153,27 @@ func (r *Runner) consumeEvents(ch chan eb.Event) {
 	for ev := range ch {
 		switch ev.Type {
 		case eb.EventMessageSent:
-			r.coll.AddSent()
+			r.coll.AddSent(ev)
 		case eb.EventMessageDelivered:
 			r.coll.AddDelivered(ev)
 		case eb.EventControlMessageSent:
-			r.coll.AddControlSent()
+			r.coll.AddControlSent(ev)
 		case eb.EventControlMessageDelivered:
 			r.coll.AddControlDelivered(ev)
+		case eb.EventLostMessage:
+			r.coll.AddLostMessage()
+		case eb.EventNoRoute:
+			r.coll.AddNoRoute()
+		case eb.EventNoRouteUser:
+			r.coll.AddNoRouteUser()
+		case eb.EventUserNotAtNode:
+			r.coll.AddUserNotAtNode()
+		case eb.EventRequestedACK:
+			r.coll.AddRequestedACK()
+		case eb.EventReceivedDataAck:
+			r.coll.AddReceivedDataAck()
+		case eb.EventTxQueueDrop:
+			r.coll.AddTxQueueDrop()
 		}
 	}
 }
@@ -134,16 +189,39 @@ func (r *Runner) emitRandomTraffic() {
 	}
 
 	from := keys[rand.Intn(len(keys))]
-	to := keys[rand.Intn(len(keys))]
-	if from.GetID() == to.GetID() {
-		return
+
+	var to mesh.INode
+	if r.sc.Traffic.RestrictToKnownRoutes {
+		if id, ok := from.GetRandomKnownNode(); ok {
+			if nd, err := r.net.(*network.NetworkImpl).GetNode(id); err == nil {
+				to = nd
+			}
+		}
+		if to == nil {
+			return
+		} // no known destinations yet
+	} else {
+		to = keys[rand.Intn(len(keys))]
+		if from.GetID() == to.GetID() {
+			return
+		}
 	}
+
+	var ackFlag uint8
+    if r.shouldRequestAck() {
+        ackFlag = packet.REQ_ACK
+    } else {
+        ackFlag = 0
+    }
+
+
+
 
 	// pick packet type according to mix
 	pt := choosePacket(r.sc.Traffic.PacketMix)
 	switch pt {
 	case "DATA":
-		from.SendData(r.net, to.GetID(), "hello")
+		from.SendData(r.net, to.GetID(), "hello", ackFlag)
 	case "USER_MSG":
 		users := to.GetConnectedUsers()
 		if len(users) == 0 {
@@ -152,7 +230,7 @@ func (r *Runner) emitRandomTraffic() {
 		du := users[rand.Intn(len(users))]
 		su := uint32(rand.Int31())
 		from.AddConnectedUser(su)
-		from.SendUserMessage(r.net, su, du, "ping")
+		from.SendUserMessage(r.net, su, du, "ping", ackFlag)
 	case "BROADCAST":
 		from.SendBroadcastInfo(r.net)
 	}
@@ -169,4 +247,9 @@ func choosePacket(m map[string]float64) string {
 		}
 	}
 	return "DATA"
+}
+
+func (r *Runner) shouldRequestAck() bool {
+    // rand.Float64() returns [0.0,1.0)
+    return rand.Float64() < r.sc.Traffic.Acks
 }

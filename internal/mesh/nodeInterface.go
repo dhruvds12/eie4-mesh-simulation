@@ -1,11 +1,13 @@
 package mesh
 
-
+import (
+	"time"
+)
 
 type INode interface {
 	GetID() uint32
 	Run(net INetwork)
-	SendData(net INetwork, destID uint32, payload string)
+	SendData(net INetwork, destID uint32, payload string, flags uint8)
 	SendBroadcastInfo(net INetwork)
 	HandleMessage(net INetwork, receivedPacket []byte)
 	GetMessageChan() chan []byte
@@ -23,5 +25,11 @@ type INode interface {
 	AddConnectedUser(userID uint32)
 	RemoveConnectedUser(userID uint32)
 
-	SendUserMessage(net INetwork, userID, destUserID uint32, payload string)
+	SendUserMessage(net INetwork, userID, destUserID uint32, payload string, flags uint8)
+
+	SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxBackoff time.Duration, BackoffScheme string, BEUnit time.Duration, BEMaxExp int) bool
+
+	GetRandomKnownNode() (uint32, bool)
+
+	SetRoutingParams(th, rreqLim, ureqLim int) bool
 }

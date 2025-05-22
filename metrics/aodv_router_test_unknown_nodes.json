@@ -1,3 +1,41 @@
+{
+  "total_sent": 75,
+  "sent_by_type": {
+    "4": 75
+  },
+  "total_control_sent": 87,
+  "control_sent_by_type": {
+    "1": 32,
+    "2": 32,
+    "3": 3,
+    "6": 20
+  },
+  "total_delivered": 69,
+  "delivered_by_type": {
+    "4": 69
+  },
+  "total_control_delivered": 193,
+  "collisions": 24,
+  "collisions_by_type": {
+    "1": 5,
+    "2": 1,
+    "4": 4,
+    "6": 9,
+    "7": 5
+  },
+  "hop_sum": 50060431088,
+  "hop_samples": 69,
+  "total_lost": 3,
+  "no_route": 0,
+  "no_route_user": 0,
+  "user_not_at_node": 0,
+  "received_ack": 19,
+  "requested_ack": 78
+}
+
+ALL ACKS
+
+
 # ────────────── simulation timing ──────────────
 duration: 90s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
@@ -24,7 +62,6 @@ traffic:
   pattern: poisson
   msg_per_node_per_min: 10 #10
   restrict_to_known_routes: false 
-  acks: 1.0                       # out of 1.0
   packet_mix:
     DATA:      1.0
     USER_MSG:  0.0
@@ -32,7 +69,7 @@ traffic:
 
 # ────────────── routing / MAC ───────────────────
 routing:
-  router_type: 1                # 0 - AODV | 1 - flood | Default - AODV
+  router_type: 0                # 0 - AODV | 1 - flood | Default - AODV
   max_hops: 5                   # TODO NOT ACTUALLY A WORKING FIELD
   reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
   rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit

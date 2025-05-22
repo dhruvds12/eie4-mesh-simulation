@@ -124,9 +124,18 @@ func (net *NetworkImpl) Leave(nodeID uint32) {
 }
 
 func (net *NetworkImpl) LeaveAll() {
+
+	net.mu.RLock()
+	ids := make([]uint32, 0, len(net.Nodes))
 	for id := range net.Nodes {
+		ids = append(ids, id)
+	}
+	net.mu.RUnlock()
+
+	for _, id := range ids {
 		net.leaveRequests <- id
 	}
+
 }
 
 // / deliverIfNoCollision checks for each recipient in tx.Recipients whether that recipient
@@ -184,7 +193,7 @@ func (net *NetworkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 		}
 	}
 
-	if metrics.Global != nil && collision{
+	if metrics.Global != nil && collision {
 		metrics.Global.AddCollision(pktType)
 	}
 }
@@ -329,4 +338,16 @@ func (net *NetworkImpl) GetNode(nodeId uint32) (mesh.INode, error) {
 		return nd, nil
 	}
 	return nil, fmt.Errorf("node with id %d not found", nodeId)
+}
+
+func (net *NetworkImpl) ActiveTransmissions() int {
+	net.mu.RLock()
+	defer net.mu.RUnlock()
+	list := make([]*Transmission, 0, len(net.transmissions))
+	for _, t := range net.transmissions {
+		if t.Active {
+			list = append(list, t)
+		}
+	}
+	return len(list)
 }

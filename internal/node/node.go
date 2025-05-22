@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"time"
 
 	"mesh-simulation/internal/eventBus"
 	"mesh-simulation/internal/mesh"
@@ -32,10 +33,17 @@ type nodeImpl struct {
 }
 
 // NewNode creates a new Node with a given ID.
-func NewNode(lat, long float64, bus *eventBus.EventBus) mesh.INode {
+func NewNode(lat, long float64, bus *eventBus.EventBus, routerType routing.RouterType) mesh.INode {
 	nodeID := rand.Int31()
 	var nodeIdInt = uint32(nodeID)
 	log.Printf("[sim] Created new node ID: %d, x: %f, y: %f", nodeID, lat, long)
+	var router routing.IRouter
+	switch routerType {
+	case routing.AODVROUTER:
+		router = routing.NewAODVRouter(nodeIdInt, bus)
+	case routing.FLOORROUTER:
+		router = routing.NewFloodRouter(nodeIdInt, bus)
+	}
 	return &nodeImpl{
 		id:             nodeIdInt,
 		coordinates:    mesh.CreateCoordinates(lat, long),
@@ -43,7 +51,7 @@ func NewNode(lat, long float64, bus *eventBus.EventBus) mesh.INode {
 		quit:           make(chan struct{}),
 		seenBroadcasts: make(map[string]bool),
 		neighbors:      make(map[uint32]bool),
-		router:         routing.NewAODVRouter(nodeIdInt, bus),
+		router:         router,
 		eventBus:       bus,
 		connectedUsers: make(map[uint32]bool),
 	}
@@ -59,11 +67,10 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 	log.Printf("Node %d: started.\n", n.id)
 	defer log.Printf("Node %d: stopped.\n", n.id)
 
-	if aodv, ok := n.router.(*routing.AODVRouter); ok {
-		aodv.StartPendingTxChecker(net, n)
-		aodv.StartBroadcastTicker(net, n) 
-		
-		aodv.SendDiffBroadcastInfo(net, n)
+	if router := n.router; router != nil {
+		router.StartPendingTxChecker(net, n)
+		router.StartBroadcastTicker(net, n)
+		router.SendDiffBroadcastInfo(net, n)
 	}
 
 	for {
@@ -71,8 +78,10 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 		case msg := <-n.messages:
 			n.HandleMessage(net, msg)
 		case <-n.quit:
-			if aodv, ok := n.router.(*routing.AODVRouter); ok {
-				aodv.StopPendingTxChecker()
+			if router := n.router; router != nil {
+				router.StopPendingTxChecker()
+				router.StopBroadcastTicker()
+				router.StopTxWorker()
 			}
 			return
 		}
@@ -91,15 +100,14 @@ func (n *nodeImpl) Run(net mesh.INetwork) {
 // 	net.UnicastMessage(m, n)
 // }
 
-
 // SendData is a convenience method calling into the router
-func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string) {
-	n.router.SendData(net, n, destID, payload)
+func (n *nodeImpl) SendData(net mesh.INetwork, destID uint32, payload string, flags uint8) {
+	n.router.SendData(net, n, destID, payload, flags)
 }
 
 // send user message
-func (n *nodeImpl) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string) {
-	n.router.SendUserMessage(net, n, userID, destUserID, payload)
+func (n *nodeImpl) SendUserMessage(net mesh.INetwork, userID, destUserID uint32, payload string, flags uint8) {
+	n.router.SendUserMessage(net, n, userID, destUserID, payload, flags)
 }
 
 // BroadcastHello sends a HELLO broadcast announcing the node’s presence.
@@ -123,7 +131,7 @@ func (n *nodeImpl) SendBroadcastInfo(net mesh.INetwork) {
 	// }
 	// net.BroadcastMessage(m, n)
 	// n.router.SendBroadcastInfo(net, n)
-	n.router.SendDiffBroadcastInfo(net, n);
+	n.router.SendDiffBroadcastInfo(net, n)
 }
 
 // HandleMessage processes an incoming message.
@@ -217,7 +225,7 @@ func (n *nodeImpl) PrintNodeDetails() {
 	fmt.Printf("    - %T\n", n.router)
 	// print out routing table
 	fmt.Println("  Routing Table:")
-	r := n.router.(*routing.AODVRouter)
+	r := n.router
 	r.PrintRoutingTable()
 
 	fmt.Println("====================================")
@@ -264,4 +272,63 @@ func (n *nodeImpl) HasConnectedUser(userID uint32) bool {
 	n.muUsers.RLock()
 	defer n.muUsers.RUnlock()
 	return n.connectedUsers[userID]
+}
+
+func (n *nodeImpl) SetRouterConstants(CCAWindow, CCASample, InitialBackoff, MaxBackoff time.Duration, BackoffScheme string, BEUnit time.Duration, BEMaxExp int) bool {
+
+	if aodv, ok := n.GetRouter().(*routing.AODVRouter); ok {
+		aodv.CcaWindow = CCAWindow
+		aodv.CcaSample = CCASample
+		aodv.InitialBackoff = InitialBackoff
+		aodv.MaxBackoff = MaxBackoff
+		aodv.BackoffScheme = BackoffScheme
+		aodv.BeUnit = BEUnit
+		aodv.BeMaxExp = BEMaxExp
+		return ok
+	}
+
+	if floodRouter, ok := n.GetRouter().(*routing.FloodRouter); ok {
+		floodRouter.CcaWindow = CCAWindow
+		floodRouter.CcaSample = CCASample
+		floodRouter.InitialBackoff = InitialBackoff
+		floodRouter.MaxBackoff = MaxBackoff
+		floodRouter.BackoffScheme = BackoffScheme
+		floodRouter.BeUnit = BEUnit
+		floodRouter.BeMaxExp = BEMaxExp
+		return ok
+	}
+
+	return false
+
+}
+
+func (n *nodeImpl) GetRandomKnownNode() (uint32, bool) {
+	aodv, ok := n.router.(*routing.AODVRouter)
+	if !ok {
+		return 0, false
+	}
+	aodv.RouteMu.RLock()
+	defer aodv.RouteMu.RUnlock()
+
+	if len(aodv.RouteTable) == 0 {
+		return 0, false
+	}
+	keys := make([]uint32, 0, len(aodv.RouteTable))
+	for id := range aodv.RouteTable {
+		if id != n.id { // never pick myself
+			keys = append(keys, id)
+		}
+	}
+	if len(keys) == 0 {
+		return 0, false
+	}
+	return keys[rand.Intn(len(keys))], true
+}
+
+func (n *nodeImpl) SetRoutingParams(th, rreqLim, ureqLim int) bool {
+	if r, ok := n.router.(*routing.AODVRouter); ok {
+		r.SetRoutingParams(th, rreqLim, ureqLim)
+		return true
+	}
+	return false
 }

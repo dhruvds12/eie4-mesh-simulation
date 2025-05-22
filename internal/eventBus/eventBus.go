@@ -21,6 +21,13 @@ const (
 	EventUserMessage             EventType = "USER_MESSAGE"
 	EventControlMessageDelivered EventType = "CONTROL_MESSAGE_DELIVERED"
 	EventControlMessageSent      EventType = "CONTROL_MESSAGE_SENT"
+	EventLostMessage             EventType = "LOST_MESSAGE"
+	EventNoRoute                 EventType = "NO_ROUTE"
+	EventNoRouteUser             EventType = "NO_ROUTE_USER"
+	EventUserNotAtNode           EventType = "USER_NOT_ATNODE"
+	EventRequestedACK            EventType = "REQUESTED_ACK"
+	EventReceivedDataAck         EventType = "RECEIVED_ACK"
+	EventTxQueueDrop             EventType = "TX_QUEUE_DROP"
 )
 
 // RouteEntry represents an entry in the routing table.
@@ -44,6 +51,7 @@ type Event struct {
 	Virtual           bool       `json:"virtual"`
 	UserID            uint32     `json:"user_id"` // also the send user
 	DestUserID        uint32     `json:"dest_user_id"`
+	PacketType        uint8      `json:"packet_type"`
 }
 
 // EventBus manages a set of subscribers and publishes events to them.

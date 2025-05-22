@@ -28,7 +28,7 @@ func CreateNodeHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFu
 		}
 
 		// Create a new node using the provided coordinates and event bus.
-		newNode := node.NewNode(payload.Lat, payload.Long, bus)
+		newNode := node.NewNode(payload.Lat, payload.Long, bus, 0)
 		// Add the node to the network.
 		net.Join(newNode)
 
@@ -106,8 +106,8 @@ func SendMessageHandler(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerF
 			http.Error(w, "Sender node_id not found", http.StatusBadRequest)
 			return
 		}
-
-		senderNode.SendData(net, destNodeID, payload.Message)
+		// Default to 0 flag
+		senderNode.SendData(net, destNodeID, payload.Message, 0)
 
 		w.Write([]byte("Sending Data ..."))
 	}
@@ -243,7 +243,8 @@ func SendUserMessage(net mesh.INetwork, bus *eventBus.EventBus) http.HandlerFunc
 		}
 
 		w.Write([]byte("Sending user message...."))
-		node.SendUserMessage(net, payload.UserID, payload.DestUserID, payload.Message)
+		// TODO set flags to default value for now ie no ack message
+		node.SendUserMessage(net, payload.UserID, payload.DestUserID, payload.Message, 0)
 
 		// bus.Publish((eventBus.Event{
 		// 	Type:       eventBus.EventUserMessage,
