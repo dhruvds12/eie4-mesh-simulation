@@ -1,0 +1,32 @@
+{
+  "total_sent": 92,
+  "sent_by_type": {
+    "18": 92
+  },
+  "total_control_sent": 174,
+  "control_sent_by_type": {
+    "15": 77,
+    "16": 77,
+    "6": 20
+  },
+  "total_delivered": 55,
+  "delivered_by_type": {
+    "18": 55
+  },
+  "total_control_delivered": 252,
+  "collisions": 22,
+  "collisions_by_type": {
+    "15": 13,
+    "16": 1,
+    "6": 8
+  },
+  "hop_sum": 68948964560,
+  "hop_samples": 55,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0,
+  "user_not_at_node": 0,
+  "received_ack": 0,
+  "requested_ack": 0,
+  "tx_queue_drop": 0
+}
