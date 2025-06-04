@@ -183,7 +183,7 @@ func (r *FloodRouter) HandleMessage(net mesh.INetwork, node mesh.INode, buf []by
 
 	// implicit ACK: we overhear our own PacketID forwarded by somebody else
 	r.pendingMu.Lock()
-	if _, ok := r.pending[bh.PacketID]; ok && bh.SrcNodeID != r.ownerID {
+	if _, ok := r.pending[bh.PacketID]; ok && bh.PrevHopID != r.ownerID {
 		delete(r.pending, bh.PacketID)
 		r.pendingMu.Unlock()
 		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventReceivedDataAck})

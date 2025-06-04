@@ -45,7 +45,7 @@ const (
 
 type BaseHeader struct {
 	DestNodeID uint32 // destination of the hop not the route
-	SrcNodeID  uint32
+	PrevHopID  uint32
 	PacketID   uint32
 	PacketType uint8
 	Flags      uint8
@@ -121,7 +121,7 @@ func ReadUint32(b []byte) uint32 { return binary.LittleEndian.Uint32(b) }
 func (bh *BaseHeader) SerialiseBaseHeader() ([]byte, error) {
 	buf := make([]byte, 16)
 	binary.LittleEndian.PutUint32(buf[0:4], bh.DestNodeID)
-	binary.LittleEndian.PutUint32(buf[4:8], bh.SrcNodeID)
+	binary.LittleEndian.PutUint32(buf[4:8], bh.PrevHopID)
 	binary.LittleEndian.PutUint32(buf[8:12], bh.PacketID)
 	buf[12] = bh.PacketType
 	buf[13] = bh.Flags
@@ -135,7 +135,7 @@ func (bh *BaseHeader) DeserialiseBaseHeader(buf []byte) error {
 		return fmt.Errorf("buffer too short for BaseHeader")
 	}
 	bh.DestNodeID = binary.LittleEndian.Uint32(buf[0:4])
-	bh.SrcNodeID = binary.LittleEndian.Uint32(buf[4:8])
+	bh.PrevHopID = binary.LittleEndian.Uint32(buf[4:8])
 	bh.PacketID = binary.LittleEndian.Uint32(buf[8:12])
 	bh.PacketType = buf[12]
 	bh.Flags = buf[13]
@@ -285,7 +285,7 @@ func CreateDataPacket(originNodeID, srcID, destID, nextHopID uint32, numHops uin
 
 	bh := BaseHeader{
 		DestNodeID: nextHopID,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_DATA,
 		Flags:      flags,
@@ -335,7 +335,7 @@ func CreateRREQPacket(srcID, destID, orginNode uint32, numHops uint8, packetID .
 	pid := chooseID(packetID...)
 	bh := BaseHeader{
 		DestNodeID: BROADCAST_ADDR,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_RREQ,
 		Flags:      0x0,
@@ -380,7 +380,7 @@ func CreateRREPPacket(srcID, destRouteID, nextHopID, orginNode uint32, lifetime 
 
 	bh := BaseHeader{
 		DestNodeID: nextHopID,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_RREP,
 		Flags:      0x0,
@@ -427,7 +427,7 @@ func CreateRERRPacket(srcID, nextHopID, reporterNodeID, brokenNodeID, originalDe
 
 	bh := BaseHeader{
 		DestNodeID: nextHopID,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_RERR,
 		Flags:      0x0,
@@ -475,7 +475,7 @@ func CreateACKPacket(srcID, destID, nextHopID, originalPacketID uint32, numHops 
 
 	bh := BaseHeader{
 		DestNodeID: nextHopID,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_ACK,
 		Flags:      0x0,
@@ -524,7 +524,7 @@ func CreateBroadcastInfoPacket(
 
 	bh := BaseHeader{
 		DestNodeID: BROADCAST_ADDR,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_BROADCAST_INFO,
 		Flags:      0x0,
@@ -722,7 +722,7 @@ func CreateUREQPacket(srcID, originNode, targetUser uint32, numHops uint8, packe
 	pid := chooseID(packetID...)
 	bh := BaseHeader{
 		DestNodeID: BROADCAST_ADDR,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_UREQ,
 		Flags:      0x0,
@@ -760,7 +760,7 @@ func DeserialiseUREQPacket(buf []byte) (BaseHeader, UREQHeader, error) {
 // CreateUREPPacket constructs a UREP (user lookup reply) packet
 func CreateUREPPacket(srcID, destID, originNode, UREPDestNodeID, userID uint32, lifetime uint16, numHops uint8, packetID ...uint32) ([]byte, uint32, error) {
 	pid := chooseID(packetID...)
-	bh := BaseHeader{DestNodeID: destID, SrcNodeID: srcID, PacketID: pid, PacketType: PKT_UREP, Flags: 0, HopCount: numHops}
+	bh := BaseHeader{DestNodeID: destID, PrevHopID: srcID, PacketID: pid, PacketType: PKT_UREP, Flags: 0, HopCount: numHops}
 	h := UREPHeader{OriginNodeID: originNode, UREPDestNodeID: UREPDestNodeID, UREPUserID: userID, Lifetime: lifetime, NumHops: numHops}
 
 	bhb, _ := bh.SerialiseBaseHeader()
@@ -806,7 +806,7 @@ func CreateUERRPacket(
 	pid := chooseID(packetID...)
 	bh := BaseHeader{
 		DestNodeID: destNodeID,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_UERR,
 		Flags:      0,
@@ -910,7 +910,7 @@ func CreateUSERMessagePacket(
 	// construct BaseHeader (dest = nextHop)
 	bh := BaseHeader{
 		DestNodeID: nextHopID,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_USER_MSG,
 		Flags:      flags,

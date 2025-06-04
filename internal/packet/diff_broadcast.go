@@ -6,7 +6,9 @@ import (
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
-//  Diff-BroadcastInfo header  -- matches ESP32 firmware byte-for-byte
+//
+//	Diff-BroadcastInfo header  -- matches ESP32 firmware byte-for-byte
+//
 // ──────────────────────────────────────────────────────────────────────────────
 type DiffBroadcastInfoHeader struct {
 	OriginNodeID uint32
@@ -33,7 +35,9 @@ func (h *DiffBroadcastInfoHeader) Deserialise(buf []byte) error {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-//  Packet builder
+//
+//	Packet builder
+//
 // ──────────────────────────────────────────────────────────────────────────────
 func CreateDiffBroadcastInfoPacket(
 	srcID uint32,
@@ -48,7 +52,7 @@ func CreateDiffBroadcastInfoPacket(
 
 	bh := BaseHeader{
 		DestNodeID: BROADCAST_ADDR,
-		SrcNodeID:  srcID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_BROADCAST_INFO,
 		HopCount:   hopCount,

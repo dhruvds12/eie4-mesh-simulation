@@ -457,7 +457,7 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 		if _, ok := r.pendingTxs[bh.PacketID]; ok {
 			// ack
 			log.Printf("[Implicit ACK]  Node %d: overheard DATA forward from %d => implicit ack for msgID=%d",
-				r.ownerID, bh.SrcNodeID, bh.PacketID)
+				r.ownerID, bh.PrevHopID, bh.PacketID)
 			delete(r.pendingTxs, bh.PacketID)
 		}
 		r.pendingMu.Unlock()
@@ -476,7 +476,7 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 		if _, ok := r.pendingTxs[bh.PacketID]; ok {
 			// ack
 			log.Printf("[Implicit ACK]  Node %d: overheard USER MSG forward from %d => implicit ack for msgID=%d",
-				r.ownerID, bh.SrcNodeID, bh.PacketID)
+				r.ownerID, bh.PrevHopID, bh.PacketID)
 			delete(r.pendingTxs, bh.PacketID)
 		}
 		r.pendingMu.Unlock()
@@ -648,9 +648,9 @@ func (r *AODVRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, buf
 	added := ids[:dh.NumAdded]
 	removed := ids[dh.NumAdded:]
 
-	r.AddDirectNeighbor(node.GetID(), bh.SrcNodeID)
+	r.AddDirectNeighbor(node.GetID(), bh.PrevHopID)
 	if dh.OriginNodeID != r.ownerID {
-		r.maybeAddRoute(dh.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+		r.maybeAddRoute(dh.OriginNodeID, bh.PrevHopID, int(bh.HopCount)+1)
 	}
 	for _, u := range added {
 		r.addToGUT(u, dh.OriginNodeID)
@@ -700,7 +700,7 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 	}
 	r.addSeenPacket(bh.PacketID)
 	// Add reverse route to RREQ source
-	r.maybeAddRoute(rh.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+	r.maybeAddRoute(rh.OriginNodeID, bh.PrevHopID, int(bh.HopCount)+1)
 
 	// if I'm the destination, send RREP
 	if r.ownerID == rh.RREQDestNodeID {
@@ -781,8 +781,8 @@ func (r *AODVRouter) handleRREP(net mesh.INetwork, node mesh.INode, receivedPack
 	r.addSeenPacket(bh.PacketID)
 
 	// Add forward route to ctrl.Source
-	r.maybeAddRoute(rreph.RREPDestNodeID, bh.SrcNodeID, int(rreph.NumHops)+1)
-	r.maybeAddRoute(bh.SrcNodeID, bh.SrcNodeID, 1)
+	r.maybeAddRoute(rreph.RREPDestNodeID, bh.PrevHopID, int(rreph.NumHops)+1)
+	r.maybeAddRoute(bh.PrevHopID, bh.PrevHopID, 1)
 
 	// if I'm the original route requester, done
 	if r.ownerID == rreph.RREPDestNodeID {
@@ -869,7 +869,7 @@ func (r *AODVRouter) handleRERR(net mesh.INetwork, node mesh.INode, receivedPack
 	log.Printf("[sim] Node %d: received RERR => broken node: %d for dest %d\n", r.ownerID, rerrHeader.BrokenNodeID, rerrHeader.OriginalDestNodeID)
 
 	// Invalidate routes
-	r.InvalidateRoutes(rerrHeader.BrokenNodeID, rerrHeader.OriginalDestNodeID, bh.SrcNodeID)
+	r.InvalidateRoutes(rerrHeader.BrokenNodeID, rerrHeader.OriginalDestNodeID, bh.PrevHopID)
 
 	if r.ownerID != bh.DestNodeID {
 		// Check if node is the intended target
@@ -939,7 +939,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 
 	// doesn't matter if packet is seeen need to send the ack
 	if bh.Flags == packet.REQ_ACK {
-		r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
+		r.sendDataAck(net, node, bh.PrevHopID, bh.PacketID)
 	}
 
 	if r.checkSeenPackets(bh.PacketID) {
@@ -982,7 +982,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		log.Printf("[sim] Node %d: no route to forward DATA destined for %d.\n", r.ownerID, dest)
 		// Optionally: r.initiateRREQ(...)
 		// no route therefore, we need ot send RERR
-		r.sendRERR(net, node, bh.SrcNodeID, dest, r.ownerID, bh.PacketID, dh.OriginNodeID)
+		r.sendRERR(net, node, bh.PrevHopID, dest, r.ownerID, bh.PacketID, dh.OriginNodeID)
 		return
 	}
 
@@ -991,7 +991,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
-	log.Printf("[sim] Node %d: forwarding DATA from %d to %d via %d\n", r.ownerID, bh.SrcNodeID, dest, route.NextHop)
+	log.Printf("[sim] Node %d: forwarding DATA from %d to %d via %d\n", r.ownerID, bh.PrevHopID, dest, route.NextHop)
 	// net.BroadcastMessage(fwdMsg, node)
 	// r.BroadcastMessageCSMA(net, node, dataPacket, packetID)
 	// TODO need to drop if the queue is full
@@ -1038,7 +1038,7 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	}
 
 	if bh.Flags == packet.REQ_ACK {
-		r.sendDataAck(net, node, bh.SrcNodeID, bh.PacketID)
+		r.sendDataAck(net, node, bh.PrevHopID, bh.PacketID)
 	}
 
 	if r.checkSeenPackets(bh.PacketID) {
@@ -1098,7 +1098,7 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 		log.Printf("[sim] Node %d: no route to forward USER MESSAGE destined for %d.\n", r.ownerID, dest)
 		// Optionally: r.initiateRREQ(...)
 		// no route therefore, we need ot send RERR
-		r.sendRERR(net, node, bh.SrcNodeID, dest, r.ownerID, bh.PacketID, umh.OriginNodeID)
+		r.sendRERR(net, node, bh.PrevHopID, dest, r.ownerID, bh.PacketID, umh.OriginNodeID)
 		return
 	}
 
@@ -1221,8 +1221,8 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 
 	// add routes
 
-	r.maybeAddRoute(bh.SrcNodeID, bh.SrcNodeID, 1)
-	r.maybeAddRoute(uh.OriginNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+	r.maybeAddRoute(bh.PrevHopID, bh.PrevHopID, 1)
+	r.maybeAddRoute(uh.OriginNodeID, bh.PrevHopID, int(bh.HopCount)+1)
 
 	if node.HasConnectedUser(uh.UREQUserID) {
 		r.eventBus.Publish(eventBus.Event{
@@ -1230,7 +1230,7 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 		})
 		// user connected to me return UREQ
 		log.Printf("[sim] [UREQ] Node %d: has user connected %d (hop count %d), sending to origin %d\n", r.ownerID, uh.UREQUserID, bh.HopCount+1, uh.OriginNodeID)
-		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, r.ownerID, uh.UREQUserID, 0, 0)
+		reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.PrevHopID, uh.OriginNodeID, r.ownerID, uh.UREQUserID, 0, 0)
 		// r.BroadcastMessageCSMA(net, node, reply, pid)
 		// TODO need to drop if the queue is full
 		r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
@@ -1254,7 +1254,7 @@ func (r *AODVRouter) handleUREQ(net mesh.INetwork, node mesh.INode, receivedPack
 			})
 			// reply with UREP along reverse path
 			log.Printf("[sim] [UREQ] Node %d: has ROUTE userr %d (hop count %d)\n", r.ownerID, uh.UREQUserID, bh.HopCount+1)
-			reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.SrcNodeID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, uint8(route.HopCount))
+			reply, pid, _ := packet.CreateUREPPacket(r.ownerID, bh.PrevHopID, uh.OriginNodeID, n.NodeID, uh.UREQUserID, 0, uint8(route.HopCount))
 			// r.BroadcastMessageCSMA(net, node, reply, pid)
 			// TODO need to drop if the queue is full
 			r.txQueue <- outgoingTx{net: net, sender: node, pkt: reply, pktID: pid}
@@ -1326,7 +1326,7 @@ func (r *AODVRouter) handleUREP(net mesh.INetwork, node mesh.INode, receivedPack
 		r.addToGUT(uh.UREPUserID, uh.UREPDestNodeID)
 
 		// add to router
-		r.maybeAddRoute(uh.UREPDestNodeID, bh.SrcNodeID, int(bh.HopCount)+1)
+		r.maybeAddRoute(uh.UREPDestNodeID, bh.PrevHopID, int(bh.HopCount)+1)
 
 		// do some thing like send the messages that were queued
 
