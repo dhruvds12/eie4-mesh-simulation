@@ -19,6 +19,9 @@ const (
 	PKT_UREP           uint8 = 0x10 //16 // user lookup reply
 	PKT_UERR           uint8 = 0x11 //17 // user lookup error
 	PKT_USER_MSG       uint8 = 0x12 //18 // user lookup error
+	PKT_PUBKEY_REQ     uint8 = 0x13 //19 // unused in sim
+	PKT_PUBKEY_RESP    uint8 = 0x14 //20 // unused in sim
+	PKT_MOVE_USER_REQ  uint8 = 0x15 //21 //TODO need to implement
 )
 
 const (
@@ -26,6 +29,7 @@ const (
 	TO_GATEWAY   uint8 = 0x02
 	I_AM_GATEWAY uint8 = 0x03
 	REQ_ACK      uint8 = 0x04
+	ENC_MSG      uint8 = 0x10
 )
 
 const (
@@ -35,6 +39,8 @@ const (
 	BROADCAST_NH   uint32 = BROADCAST_ADDR // alias used by flood router
 
 	MAX_HOPS = 5 // safety cap to avoid routing loops
+
+	FLAG_ENCRYPTED = 0x80
 )
 
 type BaseHeader struct {
