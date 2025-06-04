@@ -749,14 +749,14 @@ func (r *AODVRouter) handleRREQ(net mesh.INetwork, node mesh.INode, receivedPack
 }
 
 // ONLY use to initate rrep
-func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, destRREP, sourceRREP uint32, hopCount int) {
+func (r *AODVRouter) sendRREP(net mesh.INetwork, node mesh.INode, destRREP, sourceRREQ uint32, hopCount int) {
 	// find route to 'source' in reverse direction
-	reverseRoute, ok := r.getRoute(sourceRREP)
+	reverseRoute, ok := r.getRoute(sourceRREQ)
 	if !ok {
-		log.Printf("Node %d: can't send RREP, no route to %d.\n", r.ownerID, sourceRREP)
+		log.Printf("Node %d: can't send RREP, no route to %d.\n", r.ownerID, sourceRREQ)
 		return
 	}
-	rrepPacket, packetID, err := packet.CreateRREPPacket(r.ownerID, destRREP, reverseRoute.NextHop, sourceRREP, 0, 0, uint8(hopCount))
+	rrepPacket, packetID, err := packet.CreateRREPPacket(r.ownerID, destRREP, reverseRoute.NextHop, sourceRREQ, 0, 0, uint8(hopCount))
 	if err != nil {
 		return
 	}
@@ -1010,7 +1010,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		// TODO: need to wait for an explicit ACK request from sender (simplified)
 		expire := time.Now().Add(3 * time.Second) // e.g. 3s
 		r.pendingMu.Lock()
-		r.pendingTxs[bh.PacketID] = PendingTx{
+		r.pendingTxs[packetID] = PendingTx{
 			MsgID:      packetID,
 			Pkt:        dataPacket,
 			Dest:       dest,
