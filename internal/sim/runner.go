@@ -232,7 +232,8 @@ func (r *Runner) emitRandomTraffic() {
 		from.AddConnectedUser(su)
 		from.SendUserMessage(r.net, su, du, "ping", ackFlag)
 	case "BROADCAST":
-		from.SendBroadcastInfo(r.net)
+		// from.SendBroadcastInfo(r.net)
+		from.SendData(r.net, packet.BROADCAST_ADDR, "hello", 0)
 	}
 	// r.coll.AddSent()
 }

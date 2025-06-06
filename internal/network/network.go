@@ -157,7 +157,7 @@ func (net *NetworkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 	net.mu.RUnlock()
 
 	collision := false
-	pktType := tx.Packet[12]
+	pktType := tx.Packet[16]
 	for _, nd := range tx.Recipients {
 		// Check again that the node is still in range (e.g. if nodes move).
 		if !net.IsInRange(sender, nd) {

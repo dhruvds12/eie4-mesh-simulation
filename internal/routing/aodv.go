@@ -268,68 +268,78 @@ func (r *AODVRouter) StopTxWorker() {
 
 func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint32, payload string, flags uint8) {
 	// Check if we already have a route
-	entry, hasRoute := r.getRoute(destID)
-	if !hasRoute {
-		// Initiate RREQ
-		log.Printf("[sim] Node %d (router) -> no route for %d, initiating RREQ.\n", r.ownerID, destID)
-		dqe := DataQueueEntry{
-			packetType: packet.PKT_DATA,
-			payload:    payload,
-			sendUserID: 0,
-			destUserID: 0,
-			flags:      flags,
+	if destID != packet.BROADCAST_ADDR {
+
+		entry, hasRoute := r.getRoute(destID)
+		if !hasRoute {
+			// Initiate RREQ
+			log.Printf("[sim] Node %d (router) -> no route for %d, initiating RREQ.\n", r.ownerID, destID)
+			dqe := DataQueueEntry{
+				packetType: packet.PKT_DATA,
+				payload:    payload,
+				sendUserID: 0,
+				destUserID: 0,
+				flags:      flags,
+			}
+			r.dataMu.Lock()
+			r.dataQueue[destID] = append(r.dataQueue[destID], dqe)
+			r.dataMu.Unlock()
+			r.initiateRREQ(net, sender, destID)
+			return
 		}
-		r.dataMu.Lock()
-		r.dataQueue[destID] = append(r.dataQueue[destID], dqe)
-		r.dataMu.Unlock()
-		r.initiateRREQ(net, sender, destID)
-		return
-	}
 
-	nextHop := entry.NextHop
-	payloadBytes := []byte(payload)
-	completePacket, packetID, err := packet.CreateDataPacket(r.ownerID, r.ownerID, destID, nextHop, 0, payloadBytes, flags)
-	if err != nil {
-		log.Printf("[sim] Node %d: failed to create data packet: %v\n", r.ownerID, err)
-		return
-	}
+		nextHop := entry.NextHop
+		payloadBytes := []byte(payload)
+		completePacket, packetID, err := packet.CreateDataPacket(r.ownerID, r.ownerID, destID, nextHop, 0, payloadBytes, flags)
+		if err != nil {
+			log.Printf("[sim] Node %d: failed to create data packet: %v\n", r.ownerID, err)
+			return
+		}
 
-	// msgID2 := fmt.Sprintf("data-%s-%s-%d", r.ownerID, destID, time.Now().UnixNano())
-	// dataMsg := &message.Message{
-	// 	Type:    message.MsgData,
-	// 	From:    r.ownerID,
-	// 	Origin:  r.ownerID,
-	// 	To:      nextHop, //Todo: this could be nextHop
-	// 	Dest:    destID,
-	// 	ID:      msgID2,
-	// 	Payload: payload,
-	// }
-
-	log.Printf("[sim] Node %d (router) -> Initiating data to %d via %d\n", r.ownerID, destID, nextHop)
-	// r.BroadcastMessageCSMA(net, sender, completePacket, packetID)
-	r.eventBus.Publish(eventBus.Event{
-		Type:       eventBus.EventMessageSent,
-		PacketType: packet.PKT_DATA,
-	})
-	// TODO need to drop if the queue is full
-	r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
-
-	if flags == packet.REQ_ACK {
+		log.Printf("[sim] Node %d (router) -> Initiating data to %d via %d\n", r.ownerID, destID, nextHop)
+		// r.BroadcastMessageCSMA(net, sender, completePacket, packetID)
 		r.eventBus.Publish(eventBus.Event{
-			Type: eventBus.EventRequestedACK,
+			Type:       eventBus.EventMessageSent,
+			PacketType: packet.PKT_DATA,
 		})
-		expire := time.Now().Add(10 * time.Second) // e.g. 3s
-		r.pendingMu.Lock()
-		r.pendingTxs[packetID] = PendingTx{
-			MsgID:      packetID,
-			Pkt:        completePacket,
-			Dest:       destID,
-			NextHop:    nextHop,
-			Origin:     r.ownerID,
-			Attempts:   0,
-			ExpiryTime: expire,
+		// TODO need to drop if the queue is full
+		r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
+
+		if flags == packet.REQ_ACK {
+			r.eventBus.Publish(eventBus.Event{
+				Type: eventBus.EventRequestedACK,
+			})
+			expire := time.Now().Add(10 * time.Second) // e.g. 3s
+			r.pendingMu.Lock()
+			r.pendingTxs[packetID] = PendingTx{
+				MsgID:      packetID,
+				Pkt:        completePacket,
+				Dest:       destID,
+				NextHop:    nextHop,
+				Origin:     r.ownerID,
+				Attempts:   0,
+				ExpiryTime: expire,
+			}
+			r.pendingMu.Unlock()
+
 		}
-		r.pendingMu.Unlock()
+
+	} else {
+		payloadBytes := []byte(payload)
+		completePacket, packetID, err := packet.CreateDataPacket(r.ownerID, r.ownerID, destID, packet.BROADCAST_ADDR, 0, payloadBytes, flags)
+		if err != nil {
+			log.Printf("[sim] Node %d: failed to create data packet: %v\n", r.ownerID, err)
+			return
+		}
+		r.addSeenPacket(packetID) // prevent re reading a broadcast packet
+		r.eventBus.Publish(eventBus.Event{
+			Type:       eventBus.EventMessageSent,
+			PacketType: packet.PKT_DATA_BROADCAST,
+		})
+		// TODO need to drop if the queue is full
+		r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
+
+		// no acks for broadcast data messages
 
 	}
 
@@ -462,7 +472,7 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 		}
 		r.pendingMu.Unlock()
 		// Only the intended recipient should handle
-		if bh.DestNodeID == r.ownerID {
+		if bh.DestNodeID == r.ownerID || bh.DestNodeID == packet.BROADCAST_ADDR{
 			r.handleDataForward(net, node, receivedPacket)
 		}
 	case packet.PKT_UREQ:
@@ -954,8 +964,37 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	r.addSeenPacket(bh.PacketID)
 	payloadString := string(payload)
 	// If I'm the final destination, do nothing -> the node can "deliver" it
+
+	if dh.FinalDestID == packet.BROADCAST_ADDR {
+		log.Printf("[sim] Node %d: DATA BROADCAST arrived. Payload = %q\n", r.ownerID, payload)
+		r.eventBus.Publish(eventBus.Event{
+			Type:        eventBus.EventMessageDelivered,
+			NodeID:      r.ownerID,
+			Payload:     payloadString,
+			OtherNodeID: bh.OriginNodeID,
+			Timestamp:   time.Now(),
+			PacketType:  packet.PKT_DATA_BROADCAST,
+		})
+
+		if bh.HopCount > packet.DATA_BROADCAST_LIMIT {
+			return
+		}
+
+		dataPacket, packetID, err := packet.CreateDataPacket(bh.OriginNodeID, r.ownerID, dh.FinalDestID, 0, bh.HopCount+1, payload, 0, bh.PacketID)
+		if err != nil {
+			return
+		}
+
+		log.Printf("[sim] Node %d: forwarding DATA BROADCAST from %d \n", r.ownerID, bh.OriginNodeID)
+		// net.BroadcastMessage(fwdMsg, node)
+		// r.BroadcastMessageCSMA(net, node, dataPacket, packetID)
+		// TODO need to drop if the queue is full
+		r.txQueue <- outgoingTx{net: net, sender: node, pkt: dataPacket, pktID: packetID}
+		return
+	}
+
 	if dh.FinalDestID == r.ownerID {
-		log.Printf("[sim] Node %d: DATA arrived. Payload = %q\n", r.ownerID, payload)
+		log.Printf("[sim] Node %d: DATA NODE arrived. Payload = %q\n", r.ownerID, payload)
 		// Send an ACK back to the sender
 		r.eventBus.Publish(eventBus.Event{
 			Type:        eventBus.EventMessageDelivered,

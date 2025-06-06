@@ -1,21 +1,21 @@
 # ────────────── simulation timing ──────────────
-duration: 90s           # time we KEEP GENERATING traffic #90s
+duration: 30s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
-drain_timeout: 300s      # max extra wall-clock time we allow when end_mode = drain #300
+drain_timeout: 600s      # max extra wall-clock time we allow when end_mode = drain #300
 
 # ────────────── randomness ─────────────────────
 seed: 12345
 
 # ────────────── playground ─────────────────────
-area_km2: 3.0
+area_km2: 5.0
 
 nodes:
-  count: 10 #10
+  count: 25 #10
   placement: grid        # uniform | grid | hotspot   (only grid implemented)
   join_delay: 3000ms
 
 users:
-  per_node: 2
+  per_node: 6
 
 startup_delay: 30s
 
@@ -26,15 +26,15 @@ traffic:
   restrict_to_known_routes: false 
   acks: 0                       # out of 1.0
   packet_mix:
-    DATA:      1
-    USER_MSG:  0
-    BROADCAST: 0.0
+    DATA:      0.45
+    USER_MSG:  0.45
+    BROADCAST: 0.1
 
 # ────────────── routing / MAC ───────────────────
 routing:
-  router_type: 0                # 0 - AODV | 1 - flood | Default - AODV
+  router_type: 1                # 0 - AODV | 1 - flood | Default - AODV
   max_hops: 5                   # TODO NOT ACTUALLY A WORKING FIELD
-  reply_threshold_hops: 10       # only answer RREQ/UREQ if my route > 2 hops
+  reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
   rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
   ureq_hop_limit:      8        # drop UREQ when hop-count >= ureq_hop_limit
 
@@ -48,4 +48,4 @@ csma:
   be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/AODV_10_reply_threshold_node.json
+  metrics_file: metrics/flood_broadcast_test.json

@@ -149,8 +149,13 @@ func (r *FloodRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint
 		return
 	}
 
-	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_DATA})
-	r.trackIfAckRequested(pktID, pkt, flags)
+	if destID != packet.BROADCAST_ADDR {
+		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_DATA})
+		r.trackIfAckRequested(pktID, pkt, flags)
+	} else {
+		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_DATA_BROADCAST})
+
+	}
 }
 
 func (r *FloodRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string, flags uint8) {
@@ -362,6 +367,14 @@ func (r *FloodRouter) handleData(net mesh.INetwork, node mesh.INode, buf []byte)
 
 		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageDelivered, NodeID: r.ownerID, Payload: string(payload), OtherNodeID: bh.OriginNodeID, PacketType: packet.PKT_DATA, Timestamp: time.Now()})
 		return
+	}
+
+	if dh.FinalDestID == packet.BROADCAST_ADDR {
+		log.Printf("[sim] Node %d: DATA arrived. Payload = %q\n", r.ownerID, payload)
+		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageDelivered, NodeID: r.ownerID, Payload: string(payload), OtherNodeID: bh.OriginNodeID, PacketType: packet.PKT_DATA_BROADCAST, Timestamp: time.Now()})
+		if bh.HopCount > packet.DATA_BROADCAST_LIMIT {
+			return
+		}
 	}
 
 	// forward if TTL not exceeded

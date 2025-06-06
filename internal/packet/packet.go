@@ -8,6 +8,7 @@ import (
 
 // Packet Types
 const (
+	PKT_DATA_BROADCAST uint8 = 0x00 //0 ==> never used but just for event bus logging
 	PKT_RREQ           uint8 = 0x01 //1
 	PKT_RREP           uint8 = 0x02 //2
 	PKT_RERR           uint8 = 0x03 //3
@@ -41,6 +42,8 @@ const (
 	MAX_HOPS = 5 // safety cap to avoid routing loops
 
 	FLAG_ENCRYPTED = 0x80
+
+	DATA_BROADCAST_LIMIT = 8
 )
 
 type BaseHeader struct {
