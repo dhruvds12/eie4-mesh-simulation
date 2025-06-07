@@ -1,23 +1,23 @@
 # ────────────── simulation timing ──────────────
 duration: 120s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
-drain_timeout: 900s      # max extra wall-clock time we allow when end_mode = drain #300
+drain_timeout: 600s      # max extra wall-clock time we allow when end_mode = drain #300
 
 # ────────────── randomness ─────────────────────
 seed: 12345
 
 # ────────────── playground ─────────────────────
-area_km2: 5.0
+area_km2: 3.0
 
 nodes:
-  count: 20 #10
+  count: 10 #10
   placement: grid        # uniform | grid | hotspot   (only grid implemented)
   join_delay: 3000ms
 
 users:
   per_node: 6
 
-startup_delay: 120s
+startup_delay: 90s
 
 # ────────────── traffic model ──────────────────
 traffic:
@@ -26,9 +26,9 @@ traffic:
   restrict_to_known_routes: true 
   acks: 0                       # out of 1.0
   packet_mix:
-    DATA:      0.45
-    USER_MSG:  0.45
-    BROADCAST: 0.1
+    DATA:      0.40
+    USER_MSG:  0.40
+    BROADCAST: 0.2
 
 # ────────────── routing / MAC ───────────────────
 routing:
@@ -48,4 +48,4 @@ csma:
   be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/aodv/stable/aodv_stable_20_nodes_v1_run2.json
+  metrics_file: metrics/aodv/stable/aodv_stable_10_nodes_v1.json
