@@ -127,12 +127,27 @@ func (r *Runner) Run() error {
 
 			if r.sc.EndMode == "drain" {
 				deadline := time.Now().Add(r.sc.DrainTimeout)
-				for time.Now().Before(deadline) {
-					// if r.net.(*network.NetworkImpl).ActiveTransmissions() == 0 {
-					// 	time.Sleep(30 * time.Millisecond)
-					// 	break
-					// }
-					time.Sleep(10 * time.Millisecond)
+				var consecZero int
+				const maxZeroChecks = 30 // e.g. require 5 consecutive zero‐reads
+				const checkInterval = 10 * time.Millisecond
+
+				for {
+					inFlightNow := r.net.(*network.NetworkImpl).ActiveTransmissions()
+					if inFlightNow == 0 {
+						consecZero++
+						if consecZero >= maxZeroChecks {
+							log.Printf("No in‐flight packets for %d checks; ending early.", maxZeroChecks)
+							break
+						}
+					} else {
+						consecZero = 0
+					}
+
+					if time.Now().After(deadline) {
+						log.Printf("Drain timeout reached; forcing shutdown.")
+						break
+					}
+					time.Sleep(checkInterval)
 				}
 			}
 			log.Printf("Remaining active transmissions on close: %d", r.net.(*network.NetworkImpl).ActiveTransmissions())
@@ -208,32 +223,33 @@ func (r *Runner) emitRandomTraffic() {
 	}
 
 	var ackFlag uint8
-    if r.shouldRequestAck() {
-        ackFlag = packet.REQ_ACK
-    } else {
-        ackFlag = 0
-    }
-
-
-
+	if r.shouldRequestAck() {
+		ackFlag = packet.REQ_ACK
+	} else {
+		ackFlag = 0
+	}
 
 	// pick packet type according to mix
 	pt := choosePacket(r.sc.Traffic.PacketMix)
 	switch pt {
 	case "DATA":
-		from.SendData(r.net, to.GetID(), "hello", ackFlag)
+		go from.SendData(r.net, to.GetID(), "hello", ackFlag)
 	case "USER_MSG":
-		users := to.GetConnectedUsers()
-		if len(users) == 0 {
+		srcUsers := from.GetConnectedUsers()
+		if len(srcUsers) == 0 {
 			return
 		}
-		du := users[rand.Intn(len(users))]
-		su := uint32(rand.Int31())
-		from.AddConnectedUser(su)
-		from.SendUserMessage(r.net, su, du, "ping", ackFlag)
+		duList := to.GetConnectedUsers()
+		if len(duList) == 0 {
+			return
+		}
+		su := srcUsers[rand.Intn(len(srcUsers))] // pick from existing
+		du := duList[rand.Intn(len(duList))]     // pick from existing
+
+		go from.SendUserMessage(r.net, su, du, "ping", ackFlag)
 	case "BROADCAST":
 		// from.SendBroadcastInfo(r.net)
-		from.SendData(r.net, packet.BROADCAST_ADDR, "hello", 0)
+		go from.SendData(r.net, packet.BROADCAST_ADDR, "hello", 0)
 	}
 	// r.coll.AddSent()
 }
@@ -251,6 +267,6 @@ func choosePacket(m map[string]float64) string {
 }
 
 func (r *Runner) shouldRequestAck() bool {
-    // rand.Float64() returns [0.0,1.0)
-    return rand.Float64() < r.sc.Traffic.Acks
+	// rand.Float64() returns [0.0,1.0)
+	return rand.Float64() < r.sc.Traffic.Acks
 }
