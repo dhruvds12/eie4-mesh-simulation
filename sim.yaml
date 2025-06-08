@@ -7,17 +7,17 @@ drain_timeout: 6000s      # max extra wall-clock time we allow when end_mode = d
 seed: 12345
 
 # ────────────── playground ─────────────────────
-area_km2: 3.0
+area_km2: 4.0
 
 nodes:
-  count: 10 #10
+  count: 9 #10
   placement: grid        # uniform | grid | hotspot   (only grid implemented)
   join_delay: 3000ms
 
 users:
   per_node: 6
 
-startup_delay: 120s
+startup_delay: 300s
 
 # ────────────── traffic model ──────────────────
 traffic:
@@ -26,9 +26,10 @@ traffic:
   restrict_to_known_routes: false 
   acks: 0                       # out of 1.0
   packet_mix:
-    DATA:      0.5
-    USER_MSG:  0.5
-    BROADCAST: 0
+    DATA:      0.45
+    USER_MSG:  0.45
+    BROADCAST: 0.1
+  known_user_fraction: 0.8
 
 # ────────────── routing / MAC ───────────────────
 routing:
@@ -48,4 +49,4 @@ csma:
   be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/aodv/stable/aodv_stable_20_nodes_v3_run1.json
+  metrics_file: metrics/flood/stable/flood_stable_9_nodes_v1_redo.json

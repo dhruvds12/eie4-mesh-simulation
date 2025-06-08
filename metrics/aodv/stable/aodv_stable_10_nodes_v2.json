@@ -36,6 +36,6 @@
   "tx_queue_drop": 0,
     "start_time": "18:20:39.254133",
   "end_time": "18:26:43.506216",
-  "start_up_time_secs": 90,
+  "start_up_time_secs": 120,
   "traffic_gen_time_secs": 120
 }
