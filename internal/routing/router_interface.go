@@ -50,6 +50,8 @@ type IRouter interface {
 	BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, sendPacket []byte, packetID uint32)
 
 	SetRoutingParams(th, rreqLim, ureqLim int)
+
+	GUTSnapshot() map[uint32]UserEntry
 }
 
 type RouterType int

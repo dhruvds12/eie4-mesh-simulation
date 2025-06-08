@@ -32,4 +32,6 @@ type INode interface {
 	GetRandomKnownNode() (uint32, bool)
 
 	SetRoutingParams(th, rreqLim, ureqLim int) bool
+
+	GetRandomKnownUser() (userID uint32, ok bool)
 }

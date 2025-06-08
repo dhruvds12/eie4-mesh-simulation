@@ -24,6 +24,7 @@ type TrafficCfg struct {
 	RestrictToKnownRoutes bool               `yaml:"restrict_to_known_routes" json:"restrict_to_known_routes"`
 	Acks                  float64            `yaml:"acks" json:"acks"`
 	PacketMix             map[string]float64 `yaml:"packet_mix" json:"packet_mix"`
+	KnownUserFraction     float64            `yaml:"known_user_fraction" json:"known_user_fraction"`
 }
 
 type RoutingCfg struct {
@@ -114,6 +115,10 @@ func LoadScenario(path string) (*Scenario, error) {
 	}
 	if sc.Routing.UREQHopLimit == 0 {
 		sc.Routing.UREQHopLimit = sc.Routing.MaxHops
+	}
+
+	if sc.Traffic.KnownUserFraction == 0 {
+    	sc.Traffic.KnownUserFraction = 1.0
 	}
 
 	return sc, nil

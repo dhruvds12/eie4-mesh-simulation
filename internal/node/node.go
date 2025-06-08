@@ -332,3 +332,16 @@ func (n *nodeImpl) SetRoutingParams(th, rreqLim, ureqLim int) bool {
 	}
 	return false
 }
+
+func (n *nodeImpl) GetRandomKnownUser() (userID uint32, ok bool) {
+	gut := n.router.GUTSnapshot()
+	if len(gut) == 0 {
+		return 0, false
+	}
+	keys := make([]uint32, 0, len(gut))
+	for u := range gut {
+		keys = append(keys, u)
+	}
+	// pick one at random
+	return keys[rand.Intn(len(keys))], true
+}

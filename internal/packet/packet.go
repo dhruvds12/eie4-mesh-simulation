@@ -39,11 +39,11 @@ const (
 	BROADCAST_ADDR uint32 = 0xFFFFFFFF     // everyone hears
 	BROADCAST_NH   uint32 = BROADCAST_ADDR // alias used by flood router
 
-	MAX_HOPS = 5 // safety cap to avoid routing loops
+	MAX_HOPS = 3 // safety cap to avoid routing loops
 
 	FLAG_ENCRYPTED = 0x80
 
-	DATA_BROADCAST_LIMIT = 8
+	DATA_BROADCAST_LIMIT = 3
 )
 
 type BaseHeader struct {

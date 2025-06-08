@@ -32,6 +32,7 @@ func NewRunner(sc *Scenario, bus *eb.EventBus, net mesh.INetwork, coll *metrics.
 }
 
 func (r *Runner) Run() error {
+
 	rand.Seed(r.sc.Seed)
 	// start network goroutine
 	// r.wg.Add(1)
@@ -122,6 +123,8 @@ func (r *Runner) Run() error {
 
 	for {
 		select {
+		case <-r.quit:
+			return nil
 		case <-done:
 			tick.Stop() // stop creating new traffic
 
@@ -239,12 +242,26 @@ func (r *Runner) emitRandomTraffic() {
 		if len(srcUsers) == 0 {
 			return
 		}
-		duList := to.GetConnectedUsers()
-		if len(duList) == 0 {
-			return
-		}
+
 		su := srcUsers[rand.Intn(len(srcUsers))] // pick from existing
-		du := duList[rand.Intn(len(duList))]     // pick from existing
+
+		var du uint32
+		if rand.Float64() < r.sc.Traffic.KnownUserFraction {
+			if uid, ok := from.GetRandomKnownUser(); ok {
+				du = uid
+			} else {
+				return
+
+			}
+		} else {
+
+			duList := to.GetConnectedUsers()
+			if len(duList) == 0 {
+				return
+			}
+			du = duList[rand.Intn(len(duList))] // pick from existing
+
+		}
 
 		go from.SendUserMessage(r.net, su, du, "ping", ackFlag)
 	case "BROADCAST":
@@ -269,4 +286,10 @@ func choosePacket(m map[string]float64) string {
 func (r *Runner) shouldRequestAck() bool {
 	// rand.Float64() returns [0.0,1.0)
 	return rand.Float64() < r.sc.Traffic.Acks
+}
+
+func (r *Runner) Stop() {
+	// closing quit can be used to short‐circuit any loops in Run()
+	// you’ll need to also check `r.quit` in your Run() select
+	close(r.quit)
 }

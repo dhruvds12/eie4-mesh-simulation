@@ -370,7 +370,7 @@ func (r *FloodRouter) handleData(net mesh.INetwork, node mesh.INode, buf []byte)
 	}
 
 	if dh.FinalDestID == packet.BROADCAST_ADDR {
-		log.Printf("[sim] Node %d: DATA arrived. Payload = %q\n", r.ownerID, payload)
+		log.Printf("[sim] Node %d: DATA BROADCAST arrived. Payload = %q\n", r.ownerID, payload)
 		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageDelivered, NodeID: r.ownerID, Payload: string(payload), OtherNodeID: bh.OriginNodeID, PacketType: packet.PKT_DATA_BROADCAST, Timestamp: time.Now()})
 		if bh.HopCount > packet.DATA_BROADCAST_LIMIT {
 			return
@@ -551,4 +551,15 @@ func (r *FloodRouter) nextBackoffBE(exp int) (time.Duration, int) {
 	slots := 1 << exp
 	slot := rand.Intn(slots)
 	return time.Duration(slot) * r.BeUnit, exp + 1
+}
+
+func (r *FloodRouter) GUTSnapshot() map[uint32]UserEntry {
+    r.gutMu.RLock()
+    defer r.gutMu.RUnlock()
+    // shallow copy is fine for just keys
+    snap := make(map[uint32]UserEntry, len(r.gut))
+    for k, v := range r.gut {
+        snap[k] = v
+    }
+    return snap
 }

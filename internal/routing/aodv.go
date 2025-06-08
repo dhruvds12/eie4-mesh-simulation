@@ -559,6 +559,9 @@ func (r *AODVRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 			removed = append(removed, u)
 		}
 	}
+	if (len(added) == 0 &&  len(removed) == 0){
+		return
+	}
 	r.shadowMu.Unlock()
 
 	pkt, pid, err := packet.CreateDiffBroadcastInfoPacket(
@@ -1649,4 +1652,15 @@ func (r *AODVRouter) addSeenPacket(packetID uint32) {
 	r.seenMu.Lock()
 	r.seenMsgIDs[packetID] = true
 	r.seenMu.Unlock()
+}
+
+func (r *AODVRouter) GUTSnapshot() map[uint32]UserEntry {
+    r.gutMu.RLock()
+    defer r.gutMu.RUnlock()
+    // shallow copy is fine for just keys
+    snap := make(map[uint32]UserEntry, len(r.gut))
+    for k, v := range r.gut {
+        snap[k] = v
+    }
+    return snap
 }
