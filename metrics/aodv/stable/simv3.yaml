@@ -23,7 +23,7 @@ startup_delay: 120s
 traffic:
   pattern: poisson
   msg_per_node_per_min: 10 #10
-  restrict_to_known_routes: false 
+  restrict_to_known_routes: true 
   acks: 0                       # out of 1.0
   packet_mix:
     DATA:      0.5
@@ -32,7 +32,7 @@ traffic:
 
 # ────────────── routing / MAC ───────────────────
 routing:
-  router_type: 1                # 0 - AODV | 1 - flood | Default - AODV
+  router_type: 0                # 0 - AODV | 1 - flood | Default - AODV
   max_hops: 5                   # TODO NOT ACTUALLY A WORKING FIELD
   reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
   rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
