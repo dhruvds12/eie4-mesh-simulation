@@ -1,5 +1,5 @@
 # ────────────── simulation timing ──────────────
-duration: 30s           # time we KEEP GENERATING traffic #90s
+duration: 120s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
 drain_timeout: 6000s      # max extra wall-clock time we allow when end_mode = drain #300
 
@@ -7,37 +7,37 @@ drain_timeout: 6000s      # max extra wall-clock time we allow when end_mode = d
 seed: 12345
 
 # ────────────── playground ─────────────────────
-area_km2: 1.0
+area_km2: 9.0
 
 nodes:
-  count: 10 #10
+  count: 16 #10
   placement: grid        # uniform | grid | hotspot   (only grid implemented)
   join_delay: 3000ms
 
 users:
   per_node: 6
 
-startup_delay: 00s
+startup_delay: 300s
 
 # ────────────── traffic model ──────────────────
 traffic:
   pattern: poisson
   # msg_per_node_per_min: 10 #10 ## obselete
-  start_msg_per_node_per_min: 1.0
+  start_msg_per_node_per_min: 10.0
   end_msg_per_node_per_min: 10.0
-  restrict_to_known_routes: true 
+  restrict_to_known_routes: false 
   acks: 0                       # out of 1.0
   packet_mix:
-    DATA:      0.45
-    USER_MSG:  0.45
-    BROADCAST: 0.1
+    DATA:      0.5
+    USER_MSG:  0.5
+    BROADCAST: 0.0
   known_user_fraction: 0.8
   start:
     mode: after_join_count   # immediate | after_delay | after_join_count
     # only for after_delay:
     # delay: 30s
     # only for after_join_count:
-    join_count: 4
+    join_count: 16
 
 # ────────────── Network ───────────────────
 network:
@@ -45,7 +45,7 @@ network:
 
 # ────────────── routing / MAC ───────────────────
 routing:
-  router_type: 0                # 0 - AODV | 1 - flood | Default - AODV
+  router_type: 1                # 0 - AODV | 1 - flood | Default - AODV
   max_hops: 5                   # TODO NOT ACTUALLY A WORKING FIELD
   reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
   rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
@@ -61,4 +61,4 @@ csma:
   be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/aodv/unstable/aodv_stable_4_nodes_100_loss.json
+  metrics_file: metrics/flood/stable_redo/flood_stable_16_nodes_v3_redo.json
