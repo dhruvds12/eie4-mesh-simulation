@@ -112,7 +112,8 @@ func (r *Runner) Run() error {
 		for cCol := 0; cCol < cols && joined < r.sc.Nodes.Count; cCol++ {
 			lat := float64(rRow) * side / float64(rows-1)
 			lng := float64(cCol) * side / float64(cols-1)
-			n := node.NewNode(lat, lng, r.bus, routing.RouterType(r.sc.Routing.RouterType))
+			// make sure that the node location is in meters not in km (lat and long is not strictly correct view as x an y for this simulation type)
+			n := node.NewNode(lat*1000, lng*1000, r.bus, routing.RouterType(r.sc.Routing.RouterType))
 
 			if ok := n.SetRouterConstants(
 				r.sc.CSMA.CCAWindow,
