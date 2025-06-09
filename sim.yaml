@@ -1,5 +1,5 @@
 # ────────────── simulation timing ──────────────
-duration: 120s           # time we KEEP GENERATING traffic #90s
+duration: 30s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
 drain_timeout: 6000s      # max extra wall-clock time we allow when end_mode = drain #300
 
@@ -10,14 +10,14 @@ seed: 12345
 area_km2: 1.0
 
 nodes:
-  count: 4 #10
+  count: 10 #10
   placement: grid        # uniform | grid | hotspot   (only grid implemented)
   join_delay: 3000ms
 
 users:
   per_node: 6
 
-startup_delay: 0s
+startup_delay: 00s
 
 # ────────────── traffic model ──────────────────
 traffic:
@@ -32,10 +32,16 @@ traffic:
     USER_MSG:  0.45
     BROADCAST: 0.1
   known_user_fraction: 0.8
+  start:
+    mode: after_join_count   # immediate | after_delay | after_join_count
+    # only for after_delay:
+    # delay: 30s
+    # only for after_join_count:
+    join_count: 4
 
 # ────────────── Network ───────────────────
 network:
-  loss_rate: 1.00
+  loss_rate: 0.00
 
 # ────────────── routing / MAC ───────────────────
 routing:

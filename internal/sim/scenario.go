@@ -27,6 +27,11 @@ type TrafficCfg struct {
 	Acks                  float64            `yaml:"acks" json:"acks"`
 	PacketMix             map[string]float64 `yaml:"packet_mix" json:"packet_mix"`
 	KnownUserFraction     float64            `yaml:"known_user_fraction" json:"known_user_fraction"`
+	TrafficStart          struct {
+		Mode      string        `yaml:"mode"       json:"mode"`       // "immediate" | "after_delay" | "after_join_count"
+		Delay     time.Duration `yaml:"delay"      json:"delay"`      // only used if mode=="after_delay"
+		JoinCount int           `yaml:"join_count" json:"join_count"` // only used if mode=="after_join_count"
+	} `yaml:"start" json:"start"`
 }
 
 type RoutingCfg struct {

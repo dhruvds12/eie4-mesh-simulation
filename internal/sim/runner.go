@@ -2,6 +2,7 @@ package sim
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -40,7 +41,7 @@ func (r *Runner) Run() error {
 		log.Print("RestrictToKnownRoutes MUST be set to false if router is FLOOD")
 		return errors.New("RestrictToKnownRoutes MUST be set to false if router is FLOOD")
 	}
-	
+
 	network.SetLossProbability(r.sc.Network.LossRate)
 	go r.net.Run()
 
@@ -61,16 +62,54 @@ func (r *Runner) Run() error {
 
 	// ── metrics wire‑up ────────────────────────────────────────────────────
 	sub := r.bus.Subscribe()
+	// r.wg.Add(1)
+	// go func() {
+	// 	defer r.wg.Done()
+	// 	r.consumeEvents(sub)
+	// }()
 	go r.consumeEvents(sub)
+
+	// ── start traffic wire up ────────────────────────────────────────────────────
+	startTrafficCh := make(chan struct{})
+
+	// ── launch traffic generator ─────────────────────────────────────────
+	var once sync.Once
+	triggerStart := func() { once.Do(func() { close(startTrafficCh) }) }
+
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		r.startTrafficGenerator(startTrafficCh)
+	}()
+
+	switch r.sc.Traffic.TrafficStart.Mode {
+	case "immediate":
+		triggerStart()
+
+	case "after_delay":
+		d := r.sc.Traffic.TrafficStart.Delay
+		go func() {
+			log.Printf("[Runner] waiting %s before traffic start…", d)
+			time.Sleep(d)
+			triggerStart()
+		}()
+
+	case "after_join_count":
+		// we'll invoke triggerStart() in the join loop once we've hit the threshold
+		// no action here
+
+	default:
+		return fmt.Errorf("unknown traffic.start.mode: %q", r.sc.Traffic.TrafficStart.Mode)
+	}
 
 	// ── build nodes & users (grid) ──────────────────────────────
 	rows := int(math.Ceil(math.Sqrt(float64(r.sc.Nodes.Count))))
 	cols := rows
 	side := math.Sqrt(r.sc.AreaKm2) // side length of square
 
-	idx := 0
-	for rRow := 0; rRow < rows && idx < r.sc.Nodes.Count; rRow++ {
-		for cCol := 0; cCol < cols && idx < r.sc.Nodes.Count; cCol++ {
+	joined := 0
+	for rRow := 0; rRow < rows && joined < r.sc.Nodes.Count; rRow++ {
+		for cCol := 0; cCol < cols && joined < r.sc.Nodes.Count; cCol++ {
 			lat := float64(rRow) * side / float64(rows-1)
 			lng := float64(cCol) * side / float64(cols-1)
 			n := node.NewNode(lat, lng, r.bus, routing.RouterType(r.sc.Routing.RouterType))
@@ -99,71 +138,93 @@ func (r *Runner) Run() error {
 			for u := 0; u < r.sc.Users.PerNode; u++ {
 				n.AddConnectedUser(uint32(rand.Int31()))
 			}
-			idx++
+
+			joined++
+			// if we're in after_join_count mode, fire when threshold reached
+			if r.sc.Traffic.TrafficStart.Mode == "after_join_count" &&
+				joined >= r.sc.Traffic.TrafficStart.JoinCount {
+				log.Printf("[Runner] %d nodes joined → starting traffic\n", joined)
+				go func() {
+					time.Sleep(r.sc.StartupDelay)
+					triggerStart()
+				}()
+			}
+
 			if d := r.sc.Nodes.JoinDelay; d > 0 {
 				time.Sleep(d)
 			}
 		}
 	}
 
-	if d := r.sc.StartupDelay; d > 0 {
-		log.Printf("Startup delay: waiting %s before traffic…", d)
-		time.Sleep(d)
+	// ── wait for generator to signal done ────────────────────────────────
+	<-r.quit
+
+	// ── end‐of‐run handling ───────────────────────────────────────────────
+	if r.sc.EndMode == "drain" {
+		deadline := time.Now().Add(r.sc.DrainTimeout)
+		const (
+			maxZeroChecks = 1000
+			checkInterval = 10 * time.Millisecond
+		)
+		consecZero := 0
+		for {
+			inFlight := r.net.(*network.NetworkImpl).ActiveTransmissions()
+			if inFlight == 0 {
+				consecZero++
+				if consecZero >= maxZeroChecks {
+					break
+				}
+			} else {
+				consecZero = 0
+			}
+			if time.Now().After(deadline) {
+				log.Print("[Runner] drain timeout reached")
+				break
+			}
+			time.Sleep(checkInterval)
+		}
 	}
 
-	// ── traffic generator ─────────────────────────────────────────────────
-	λ := r.sc.Traffic.MsgPerNodePerMin / 60.0 // per‑sec rate per node
-	if λ == 0 {
-		λ = 0.1
+	// final teardown
+	if leaver, ok := r.net.(interface{ LeaveAll() }); ok {
+		leaver.LeaveAll()
 	}
-	interval := time.Duration(1e9 / (λ * float64(r.sc.Nodes.Count))) // ns
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
+	r.wg.Wait()
+	return nil
+}
 
-	done := time.After(r.sc.Duration)
+// startTrafficGenerator blocks until startCh is closed, then emits traffic
+// for the full duration, finally closing r.quit to wake Runner.Run().
+func (r *Runner) startTrafficGenerator(startCh <-chan struct{}) {
+	<-startCh
+	log.Print("[TrafficGen] starting…")
+
+	start := time.Now()
+	end := start.Add(r.sc.Duration)
 
 	for {
-		select {
-		case <-r.quit:
-			return nil
-		case <-done:
-			tick.Stop() // stop creating new traffic
-
-			if r.sc.EndMode == "drain" {
-				deadline := time.Now().Add(r.sc.DrainTimeout)
-				var consecZero int
-				const maxZeroChecks = 1000 // e.g. require 5 consecutive zero‐reads
-				const checkInterval = 10 * time.Millisecond
-
-				for {
-					inFlightNow := r.net.(*network.NetworkImpl).ActiveTransmissions()
-					if inFlightNow == 0 {
-						consecZero++
-						if consecZero >= maxZeroChecks {
-							log.Printf("No in‐flight packets for %d checks; ending early.", maxZeroChecks)
-							break
-						}
-					} else {
-						consecZero = 0
-					}
-
-					if time.Now().After(deadline) {
-						log.Printf("Drain timeout reached; forcing shutdown.")
-						break
-					}
-					time.Sleep(checkInterval)
-				}
-			}
-			log.Printf("Remaining active transmissions on close: %d", r.net.(*network.NetworkImpl).ActiveTransmissions())
+		now := time.Now()
+		if now.After(end) {
 			close(r.quit)
-			if leaver, ok := r.net.(interface{ LeaveAll() }); ok {
-				leaver.LeaveAll()
-			}
+			return
+		}
 
-			r.wg.Wait()
-			return nil
-		case <-tick.C:
+		// linear ramp: S → E msgs/node/min
+		frac := now.Sub(start).Seconds() / r.sc.Duration.Seconds()
+		S, E := r.sc.Traffic.StartMsgPerNodePerMin, r.sc.Traffic.EndMsgPerNodePerMin
+		curRPM := S + (E-S)*frac
+
+		λ := curRPM / 60.0 // per‐sec rate per node
+		if λ <= 0 {
+			λ = 0.1
+		}
+		interval := time.Duration(float64(time.Second) / (λ * float64(r.sc.Nodes.Count)))
+
+		select {
+		case <-time.After(interval):
 			r.emitRandomTraffic()
+		case <-r.quit:
+			return
 		}
 	}
 }
