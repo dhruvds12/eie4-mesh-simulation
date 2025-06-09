@@ -3,6 +3,7 @@ package network
 import (
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -20,6 +21,19 @@ const (
 	// first transmission would be removed before the check for a collision is completed therefore 2nd transmission would
 	// also be delivered
 )
+
+var LossProbability float64 = 0.0
+
+// Call this during startup to configure loss:
+func SetLossProbability(p float64) {
+	if p < 0 {
+		p = 0
+	}
+	if p > 1 {
+		p = 1
+	}
+	LossProbability = p
+}
 
 // Struct to hold the transmission details
 type Transmission struct {
@@ -187,10 +201,20 @@ func (net *NetworkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 			log.Printf("[Collision] At node %d, skipping delivery of msg %d due to %d overlapping transmission(s).\n",
 				nd.GetID(), tx.PacketID, overlappingCount)
 			collision = true
-		} else {
-			nd.GetMessageChan() <- tx.Packet
-			log.Printf("[Network] Delivered msg %d to node %d.\n", tx.PacketID, nd.GetID())
+			continue
 		}
+
+		if rand.Float64() < LossProbability {
+			log.Printf("[RandomDrop] Node %d randomly drops msg %d (p=%.2f)\n",
+				nd.GetID(), tx.PacketID, LossProbability)
+			if metrics.Global != nil {
+				metrics.Global.AddLostMessage()
+			}
+			continue
+		}
+
+		nd.GetMessageChan() <- tx.Packet
+		log.Printf("[Network] Delivered msg %d to node %d.\n", tx.PacketID, nd.GetID())
 	}
 
 	if metrics.Global != nil && collision {

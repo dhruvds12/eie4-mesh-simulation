@@ -40,7 +40,8 @@ func (r *Runner) Run() error {
 		log.Print("RestrictToKnownRoutes MUST be set to false if router is FLOOD")
 		return errors.New("RestrictToKnownRoutes MUST be set to false if router is FLOOD")
 	}
-
+	
+	network.SetLossProbability(r.sc.Network.LossRate)
 	go r.net.Run()
 
 	// ── build nodes & users ────────────────────────────────────────────────

@@ -21,6 +21,8 @@ type UserCfg struct {
 type TrafficCfg struct {
 	Pattern               string             `yaml:"pattern" json:"pattern"`
 	MsgPerNodePerMin      float64            `yaml:"msg_per_node_per_min" json:"msg_per_node_per_min"`
+	StartMsgPerNodePerMin float64            `yaml:"start_msg_per_node_per_min" json:"start_msg_per_node_per_min"`
+	EndMsgPerNodePerMin   float64            `yaml:"end_msg_per_node_per_min"   json:"end_msg_per_node_per_min"`
 	RestrictToKnownRoutes bool               `yaml:"restrict_to_known_routes" json:"restrict_to_known_routes"`
 	Acks                  float64            `yaml:"acks" json:"acks"`
 	PacketMix             map[string]float64 `yaml:"packet_mix" json:"packet_mix"`
@@ -49,6 +51,11 @@ type CSMAcfg struct {
 	BEMaxExp       int           `yaml:"be_max_exp" json:"be_max_exp"`
 }
 
+// new top-level network settings
+type NetworkCfg struct {
+	LossRate float64 `yaml:"loss_rate" json:"loss_rate"`
+}
+
 type Scenario struct {
 	Duration     time.Duration `yaml:"duration" json:"duration"`
 	Seed         int64         `yaml:"seed" json:"seed"`
@@ -61,6 +68,7 @@ type Scenario struct {
 	CSMA         CSMAcfg       `yaml:"csma"   json:"csma"`
 	EndMode      string        `yaml:"end_mode" json:"end_mode"`
 	DrainTimeout time.Duration `yaml:"drain_timeout" json:"drain_timeout"`
+	Network      NetworkCfg    `yaml:"network"  json:"network"`
 	Logging      LogCfg        `yaml:"logging" json:"logging"`
 }
 
@@ -118,7 +126,14 @@ func LoadScenario(path string) (*Scenario, error) {
 	}
 
 	if sc.Traffic.KnownUserFraction == 0 {
-    	sc.Traffic.KnownUserFraction = 1.0
+		sc.Traffic.KnownUserFraction = 1.0
+	}
+
+	if sc.Traffic.StartMsgPerNodePerMin == 0 {
+		sc.Traffic.StartMsgPerNodePerMin = sc.Traffic.MsgPerNodePerMin // for backward compat
+	}
+	if sc.Traffic.EndMsgPerNodePerMin == 0 {
+		sc.Traffic.EndMsgPerNodePerMin = sc.Traffic.MsgPerNodePerMin
 	}
 
 	return sc, nil
