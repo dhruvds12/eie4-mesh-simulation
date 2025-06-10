@@ -164,7 +164,7 @@ func (r *Runner) Run() error {
 	if r.sc.EndMode == "drain" {
 		deadline := time.Now().Add(r.sc.DrainTimeout)
 		const (
-			maxZeroChecks = 1000
+			maxZeroChecks = 6000
 			checkInterval = 10 * time.Millisecond
 		)
 		consecZero := 0

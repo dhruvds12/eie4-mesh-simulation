@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -46,7 +47,7 @@ type PendingTx struct {
 }
 
 const maxRetrans = 3
-const retryTimeout = 3 * time.Second
+const retryTimeout = 30 * time.Second
 
 type UserEntry struct {
 	NodeID   uint32 // home node
@@ -196,7 +197,8 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 							pkt: tx.Pkt, pktID: msgID}
 
 						tx.Attempts++
-						tx.ExpiryTime = now.Add(retryTimeout)
+						jitter := time.Duration(rand.Intn(10000)) * time.Millisecond
+						tx.ExpiryTime = now.Add(retryTimeout * (time.Duration(tx.Attempts+1) + jitter))
 						r.pendingMu.Lock()
 						r.pendingTxs[msgID] = tx
 						r.pendingMu.Unlock()
@@ -212,15 +214,15 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 						// TODO: RE ENABLE --> removed for testing
 						// No nodes are being turned off currently so investigating if large loss of messages is due to
 						// incorrect route invalidation.
-						r.InvalidateRoutes(tx.NextHop, tx.Dest, 0)
-						if r.ownerID != tx.Origin {
-							route, found := r.getRoute(tx.Origin)
-							if found {
-								if net != nil && node != nil {
-									r.sendRERR(net, node, route.NextHop, tx.Dest, tx.NextHop, msgID, tx.Origin)
-								}
-							}
-						}
+						// r.InvalidateRoutes(tx.NextHop, tx.Dest, 0)
+						// if r.ownerID != tx.Origin {
+						// 	route, found := r.getRoute(tx.Origin)
+						// 	if found {
+						// 		if net != nil && node != nil {
+						// 			r.sendRERR(net, node, route.NextHop, tx.Dest, tx.NextHop, msgID, tx.Origin)
+						// 		}
+						// 	}
+						// }
 
 					}
 
@@ -309,7 +311,8 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 			r.eventBus.Publish(eventBus.Event{
 				Type: eventBus.EventRequestedACK,
 			})
-			expire := time.Now().Add(10 * time.Second) // e.g. 3s
+			jitter := time.Duration(rand.Intn(10000)) * time.Millisecond
+			expire := time.Now().Add(retryTimeout + jitter) // e.g. 3s
 			r.pendingMu.Lock()
 			r.pendingTxs[packetID] = PendingTx{
 				MsgID:      packetID,
@@ -394,7 +397,8 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 		r.eventBus.Publish(eventBus.Event{
 			Type: eventBus.EventRequestedACK,
 		})
-		expire := time.Now().Add(10 * time.Second) // e.g. 3s
+		jitter := time.Duration(rand.Intn(10000)) * time.Millisecond
+		expire := time.Now().Add(retryTimeout + jitter) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[packetID] = PendingTx{
 			MsgID:      packetID,
@@ -472,7 +476,7 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 		}
 		r.pendingMu.Unlock()
 		// Only the intended recipient should handle
-		if bh.DestNodeID == r.ownerID || bh.DestNodeID == packet.BROADCAST_ADDR{
+		if bh.DestNodeID == r.ownerID || bh.DestNodeID == packet.BROADCAST_ADDR {
 			r.handleDataForward(net, node, receivedPacket)
 		}
 	case packet.PKT_UREQ:
@@ -559,7 +563,7 @@ func (r *AODVRouter) SendDiffBroadcastInfo(net mesh.INetwork, node mesh.INode) {
 			removed = append(removed, u)
 		}
 	}
-	if (len(added) == 0 &&  len(removed) == 0){
+	if len(added) == 0 && len(removed) == 0 {
 		return
 	}
 	r.shadowMu.Unlock()
@@ -955,7 +959,7 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	}
 
 	// doesn't matter if packet is seeen need to send the ack
-	if bh.Flags == packet.REQ_ACK {
+	if bh.Flags == packet.REQ_ACK && dh.FinalDestID == r.ownerID {
 		r.sendDataAck(net, node, bh.PrevHopID, bh.PacketID)
 	}
 
@@ -1050,7 +1054,8 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		})
 		// log.Printf("{Implicit ACK} Node %d: overheard forward from %d => implicit ack for msgID=%d", r.ownerID, originID, msg.GetID())
 		// TODO: need to wait for an explicit ACK request from sender (simplified)
-		expire := time.Now().Add(3 * time.Second) // e.g. 3s
+		jitter := time.Duration(rand.Intn(10000)) * time.Millisecond
+		expire := time.Now().Add(retryTimeout + jitter) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[packetID] = PendingTx{
 			MsgID:      packetID,
@@ -1083,7 +1088,11 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
-	if bh.Flags == packet.REQ_ACK {
+	// if bh.Flags == packet.REQ_ACK {
+	// 	// r.sendDataAck(net, node, bh.PrevHopID, bh.PacketID)
+	// }
+
+	if bh.Flags == packet.REQ_ACK && umh.ToNodeID == r.ownerID {
 		r.sendDataAck(net, node, bh.PrevHopID, bh.PacketID)
 	}
 
@@ -1161,8 +1170,9 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 		r.eventBus.Publish(eventBus.Event{
 			Type: eventBus.EventRequestedACK,
 		})
+		jitter := time.Duration(rand.Intn(10000)) * time.Millisecond
 
-		expire := time.Now().Add(3 * time.Second) // e.g. 3s
+		expire := time.Now().Add(retryTimeout + jitter) // e.g. 3s
 		r.pendingMu.Lock()
 		r.pendingTxs[bh.PacketID] = PendingTx{
 			MsgID:      bh.PacketID,
@@ -1655,12 +1665,12 @@ func (r *AODVRouter) addSeenPacket(packetID uint32) {
 }
 
 func (r *AODVRouter) GUTSnapshot() map[uint32]UserEntry {
-    r.gutMu.RLock()
-    defer r.gutMu.RUnlock()
-    // shallow copy is fine for just keys
-    snap := make(map[uint32]UserEntry, len(r.gut))
-    for k, v := range r.gut {
-        snap[k] = v
-    }
-    return snap
+	r.gutMu.RLock()
+	defer r.gutMu.RUnlock()
+	// shallow copy is fine for just keys
+	snap := make(map[uint32]UserEntry, len(r.gut))
+	for k, v := range r.gut {
+		snap[k] = v
+	}
+	return snap
 }

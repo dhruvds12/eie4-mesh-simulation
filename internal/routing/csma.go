@@ -44,6 +44,9 @@ func (r *AODVRouter) BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, 
 			log.Printf("[CSMA] Node %d:   Channel idle %v – transmit",
 				r.ownerID, r.CcaWindow)
 			net.BroadcastMessage(sendPacket, sender, packetID)
+			// the radio is sending therefore we should not allow another packet to come in this is similar to the actual node logic that achieves that relying ont eh DIO1 callback to say tranmission complete
+			radioBusy := 300 + time.Duration(rand.Intn(10000))*time.Millisecond
+			time.Sleep(radioBusy)
 			return
 		}
 
