@@ -23,8 +23,8 @@ startup_delay: 30s
 traffic:
   pattern: poisson
   # msg_per_node_per_min: 10 #10 ## obselete
-  start_msg_per_node_per_min: 10.0
-  end_msg_per_node_per_min: 10.0
+  start_msg_per_node_per_min: 5.0
+  end_msg_per_node_per_min: 5.0
   restrict_to_known_routes: true 
   acks: 0.0                       # out of 1.0
   packet_mix:
@@ -54,11 +54,11 @@ routing:
 csma:
   cca_window:      20ms      # how long we must sense idle
   cca_sample:      100µs    # sampling granularity inside that window
-  initial_backoff: 300ms
+  initial_backoff: 500ms
   max_backoff:     10s
-  backoff_scheme:  be   # binary | be
-  be_unit:         75ms     # only used when backoff_scheme = be
-  be_max_exp:      20        # BE grows from 0…be_max_exp inclusive
+  backoff_scheme:  binary   # binary | be
+  be_unit:         20ms     # only used when backoff_scheme = be
+  be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/aodv/stable_redo_new/aodv_stable_16_nodes_v3_redo_00_ack_be_50_ptransmit.json
+  metrics_file: metrics/aodv/stable_redo/aodv_stable_16_nodes_v4_redo_0_ack_20_cca_jitter_implicit_acks_counted.json
