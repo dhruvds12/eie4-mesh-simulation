@@ -35,19 +35,39 @@ func (r *AODVRouter) BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, 
 	// log.Printf("[CSMA] Node %d: Channel is free. Broadcasting message.\n", r.ownerID)
 	// net.BroadcastMessage(sendPacket, sender, packetID)
 
+	jitter := time.Duration(rand.Int63n(int64(100 * time.Millisecond)))
+	log.Printf("[CSMA] Node %d: initial jitter %v before CCA\n", r.ownerID, jitter)
+	time.Sleep(jitter)
+
 	backoff := r.InitialBackoff
-	beExp := 0
+	beExp := 2
+	PTransmit := 0.25
 
 	for {
 		// channel sensed idle for the whole CCA window?
 		if r.waitClearChannel(net, sender) {
-			log.Printf("[CSMA] Node %d:   Channel idle %v – transmit",
-				r.ownerID, r.CcaWindow)
-			net.BroadcastMessage(sendPacket, sender, packetID)
-			// the radio is sending therefore we should not allow another packet to come in this is similar to the actual node logic that achieves that relying ont eh DIO1 callback to say tranmission complete
-			radioBusy := 300 + time.Duration(rand.Intn(10000))*time.Millisecond
-			time.Sleep(radioBusy)
-			return
+			// log.Printf("[CSMA] Node %d:   Channel idle %v – transmit",
+			// 	r.ownerID, r.CcaWindow)
+			// net.BroadcastMessage(sendPacket, sender, packetID)
+			// // the radio is sending therefore we should not allow another packet to come in this is similar to the actual node logic that achieves that relying ont eh DIO1 callback to say tranmission complete
+			// radioBusy := 300*time.Millisecond + time.Duration(rand.Intn(10000))*time.Millisecond
+			// time.Sleep(radioBusy)
+			// return
+
+			if rand.Float64() <= PTransmit {
+				log.Printf("[CSMA] Node %d: coin flip OK (p=%.2f) – transmit\n", r.ownerID, PTransmit)
+				log.Printf("[CSMA] Node %d:   Channel idle %v – transmit",
+					r.ownerID, r.CcaWindow)
+				net.BroadcastMessage(sendPacket, sender, packetID)
+				// the radio is sending therefore we should not allow another packet to come in this is similar to the actual node logic that achieves that relying ont eh DIO1 callback to say tranmission complete
+				radioBusy := 300*time.Millisecond + time.Duration(rand.Intn(1000))*time.Millisecond
+				time.Sleep(radioBusy)
+				return
+			} else {
+				log.Printf("[CSMA] Node %d: coin flip NO (p=%.2f) – defer 300ms\n", r.ownerID, PTransmit)
+				time.Sleep(300 * time.Millisecond) // hold off one full transmission slot
+				continue                           // then retry CCA
+			}
 		}
 
 		var wait time.Duration

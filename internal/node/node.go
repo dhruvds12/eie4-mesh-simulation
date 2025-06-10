@@ -333,15 +333,43 @@ func (n *nodeImpl) SetRoutingParams(th, rreqLim, ureqLim int) bool {
 	return false
 }
 
+// func (n *nodeImpl) GetRandomKnownUser() (userID uint32, ok bool) {
+// 	gut := n.router.GUTSnapshot()
+// 	if len(gut) == 0 {
+// 		return 0, false
+// 	}
+// 	keys := make([]uint32, 0, len(gut))
+// 	for u := range gut {
+// 		keys = append(keys, u)
+// 	}
+// 	// pick one at random
+// 	return keys[rand.Intn(len(keys))], true
+// }
+
 func (n *nodeImpl) GetRandomKnownUser() (userID uint32, ok bool) {
-	gut := n.router.GUTSnapshot()
-	if len(gut) == 0 {
-		return 0, false
-	}
-	keys := make([]uint32, 0, len(gut))
-	for u := range gut {
-		keys = append(keys, u)
-	}
-	// pick one at random
-	return keys[rand.Intn(len(keys))], true
+    // take a snapshot of the GUT
+    gut := n.router.GUTSnapshot()
+
+    // lock local users so we can test membership
+    n.muUsers.RLock()
+    defer n.muUsers.RUnlock()
+
+    // build a list of candidates: users in GUT but not locally connected
+    candidates := make([]uint32, 0, len(gut))
+    for uid, entry := range gut {
+        // Skip if this node is the home node for that user
+        if entry.NodeID == n.id {
+            continue
+        }
+        // Skip if user is currently attached to me
+        if n.connectedUsers[uid] {
+            continue
+        }
+        candidates = append(candidates, uid)
+    }
+
+    if len(candidates) == 0 {
+        return 0, false
+    }
+    return candidates[rand.Intn(len(candidates))], true
 }

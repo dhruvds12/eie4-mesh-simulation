@@ -69,7 +69,7 @@ type tx struct {
 const (
 	defaultCcaWindow      = 5 * time.Millisecond
 	defaultCcaSample      = 100 * time.Microsecond
-	defaultInitialBackoff = 100 * time.Millisecond
+	defaultInitialBackoff = 300 * time.Millisecond
 	defaultMaxBackoff     = 2 * time.Second
 	defaultBeUnit         = 20 * time.Millisecond
 	defaultBeMaxExp       = 5
@@ -509,6 +509,8 @@ func (r *FloodRouter) BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode,
 		if r.waitClearChannel(net, sender) {
 			log.Printf("[CSMA] Node %d (flood):   Channel idle %v – transmit", r.ownerID, r.CcaWindow)
 			net.BroadcastMessage(sendPacket, sender, packetID)
+			radioBusy := 300*time.Millisecond
+			time.Sleep(radioBusy)
 			return
 		}
 
@@ -554,12 +556,12 @@ func (r *FloodRouter) nextBackoffBE(exp int) (time.Duration, int) {
 }
 
 func (r *FloodRouter) GUTSnapshot() map[uint32]UserEntry {
-    r.gutMu.RLock()
-    defer r.gutMu.RUnlock()
-    // shallow copy is fine for just keys
-    snap := make(map[uint32]UserEntry, len(r.gut))
-    for k, v := range r.gut {
-        snap[k] = v
-    }
-    return snap
+	r.gutMu.RLock()
+	defer r.gutMu.RUnlock()
+	// shallow copy is fine for just keys
+	snap := make(map[uint32]UserEntry, len(r.gut))
+	for k, v := range r.gut {
+		snap[k] = v
+	}
+	return snap
 }

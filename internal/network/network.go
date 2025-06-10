@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	maxRange          = 1400.0                 // Maximum range (meters)
+	maxRange          = 1450.0                 // Maximum range (meters)
 	LoRaAirTime       = 300 * time.Millisecond // Duration a transmission is on air
 	PruneInterval     = 3 * time.Second        // How often to run the pruner
 	TransmissionGrace = 500 * time.Millisecond // How long after end time to keep transmissions

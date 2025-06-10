@@ -197,8 +197,9 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 							pkt: tx.Pkt, pktID: msgID}
 
 						tx.Attempts++
+						backoffBase := retryTimeout * time.Duration(tx.Attempts+1)
 						jitter := time.Duration(rand.Intn(10000)) * time.Millisecond
-						tx.ExpiryTime = now.Add(retryTimeout * (time.Duration(tx.Attempts+1) + jitter))
+						tx.ExpiryTime = now.Add(backoffBase + jitter)
 						r.pendingMu.Lock()
 						r.pendingTxs[msgID] = tx
 						r.pendingMu.Unlock()
@@ -473,8 +474,13 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 			log.Printf("[Implicit ACK]  Node %d: overheard DATA forward from %d => implicit ack for msgID=%d",
 				r.ownerID, bh.PrevHopID, bh.PacketID)
 			delete(r.pendingTxs, bh.PacketID)
+
+			r.eventBus.Publish(eventBus.Event{
+				Type: eventBus.EventReceivedDataAck,
+			})
 		}
 		r.pendingMu.Unlock()
+
 		// Only the intended recipient should handle
 		if bh.DestNodeID == r.ownerID || bh.DestNodeID == packet.BROADCAST_ADDR {
 			r.handleDataForward(net, node, receivedPacket)
@@ -492,8 +498,13 @@ func (r *AODVRouter) HandleMessage(net mesh.INetwork, node mesh.INode, receivedP
 			log.Printf("[Implicit ACK]  Node %d: overheard USER MSG forward from %d => implicit ack for msgID=%d",
 				r.ownerID, bh.PrevHopID, bh.PacketID)
 			delete(r.pendingTxs, bh.PacketID)
+
+			r.eventBus.Publish(eventBus.Event{
+				Type: eventBus.EventReceivedDataAck,
+			})
 		}
 		r.pendingMu.Unlock()
+
 		if bh.DestNodeID == r.ownerID {
 			r.handleUserMessage(net, node, receivedPacket)
 		}
@@ -964,6 +975,11 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 	}
 
 	if r.checkSeenPackets(bh.PacketID) {
+		if bh.Flags == packet.REQ_ACK {
+			log.Printf("Node %d: sending Data ack as previous failed %d.\n", r.ownerID, bh.PacketID)
+			r.sendDataAck(net, node, bh.PrevHopID, bh.PacketID)
+			return
+		}
 		log.Printf("Node %d: ignoring duplicate Data %d.\n", r.ownerID, bh.PacketID)
 		return
 	}
@@ -1097,6 +1113,10 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 	}
 
 	if r.checkSeenPackets(bh.PacketID) {
+		if bh.Flags == packet.REQ_ACK {
+			log.Printf("Node %d: sending USER Msg ACK as original was lost %d.\n", r.ownerID, bh.PacketID)
+			r.sendDataAck(net, node, bh.PrevHopID, bh.PacketID)
+		}
 		log.Printf("Node %d: ignoring duplicate USER Msg %d.\n", r.ownerID, bh.PacketID)
 		return
 	}
