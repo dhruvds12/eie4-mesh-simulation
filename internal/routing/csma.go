@@ -41,7 +41,7 @@ func (r *AODVRouter) BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode, 
 
 	backoff := r.InitialBackoff
 	beExp := 2
-	PTransmit := 0.25
+	PTransmit := 1.00
 
 	for {
 		// channel sensed idle for the whole CCA window?
