@@ -39,7 +39,7 @@
   "requested_ack": 603,
   "tx_queue_drop": 0,
   "start_time": "15:06:46.772804",
-  "end_time": "5:29:42.908767",
+  "end_time": "15:29:42.908767",
   "start_up_time_secs": 90,
   "traffic_gen_time_secs": 120
 
