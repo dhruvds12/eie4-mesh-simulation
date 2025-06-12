@@ -58,7 +58,7 @@ func sendersCanCollide(senderA, senderB mesh.INode) bool {
 }
 
 type NetworkImpl struct {
-	mu    sync.RWMutex
+	Mu    sync.RWMutex
 	Nodes map[uint32]mesh.INode
 
 	joinRequests  chan mesh.INode
@@ -102,8 +102,8 @@ func (net *NetworkImpl) runPruner() {
 
 // pruneTransmissions iterates over the transmissions map and removes any transmission whose EndTime is more than TransmissionGrace ago.
 func (net *NetworkImpl) pruneTransmissions() {
-	net.mu.Lock()
-	defer net.mu.Unlock()
+	net.Mu.Lock()
+	defer net.Mu.Unlock()
 	now := time.Now()
 	for msgID, tx := range net.transmissions {
 		// If the transmission ended more than TransmissionGrace ago, remove it.
@@ -139,12 +139,12 @@ func (net *NetworkImpl) Leave(nodeID uint32) {
 
 func (net *NetworkImpl) LeaveAll() {
 
-	net.mu.RLock()
+	net.Mu.RLock()
 	ids := make([]uint32, 0, len(net.Nodes))
 	for id := range net.Nodes {
 		ids = append(ids, id)
 	}
-	net.mu.RUnlock()
+	net.Mu.RUnlock()
 
 	for _, id := range ids {
 		net.leaveRequests <- id
@@ -157,18 +157,18 @@ func (net *NetworkImpl) LeaveAll() {
 func (net *NetworkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode) {
 	// For each recipient from our pre-filtered list:
 	// set inactive
-	net.mu.Lock()
+	net.Mu.Lock()
 	tx.Active = false
-	net.mu.Unlock()
+	net.Mu.Unlock()
 
 	// Now, use a read lock for iterating over transmissions.
-	net.mu.RLock()
+	net.Mu.RLock()
 	// Copy the relevant data from net.transmissions to minimise the lock duration.
 	transmissionsSnapshot := make([]*Transmission, 0, len(net.transmissions))
 	for _, otherTx := range net.transmissions {
 		transmissionsSnapshot = append(transmissionsSnapshot, otherTx)
 	}
-	net.mu.RUnlock()
+	net.Mu.RUnlock()
 
 	collision := false
 	pktType := tx.Packet[16]
@@ -226,7 +226,7 @@ func (net *NetworkImpl) deliverIfNoCollision(tx *Transmission, sender mesh.INode
 // that are in range of the sender at the start of transmission and creates a Transmission record.
 // The transmission record is kept in the global map until it is pruned by the pruner goroutine.
 func (net *NetworkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packetID uint32) {
-	net.mu.Lock()
+	net.Mu.Lock()
 
 	start := time.Now()
 	end := start.Add(LoRaAirTime)
@@ -261,7 +261,7 @@ func (net *NetworkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packe
 	// Store the transmission.
 	net.transmissions[packetID] = tx
 
-	net.mu.Unlock()
+	net.Mu.Unlock()
 
 	// We schedule a callback with time.AfterFunc to deliver the message as soon as its airtime is finished.
 	// Note: We do not delete the transmission here. The pruner will remove it after TransmissionGrace has elapsed.
@@ -273,8 +273,8 @@ func (net *NetworkImpl) BroadcastMessage(packet []byte, sender mesh.INode, packe
 
 // UnicastMessage simulates a direct unicast from sender to msg.To().
 func (net *NetworkImpl) UnicastMessage(msg []byte, sender mesh.INode, packetID uint32, to uint32) {
-	net.mu.RLock()
-	defer net.mu.RUnlock()
+	net.Mu.RLock()
+	defer net.Mu.RUnlock()
 
 	if receiver, ok := net.Nodes[to]; ok {
 		if net.IsInRange(sender, receiver) {
@@ -292,9 +292,9 @@ func (net *NetworkImpl) UnicastMessage(msg []byte, sender mesh.INode, packetID u
 
 // addNode inserts the node into the map, starts its goroutine, and triggers a broadcast HELLO.
 func (net *NetworkImpl) addNode(n mesh.INode) {
-	net.mu.Lock()
+	net.Mu.Lock()
 	net.Nodes[n.GetID()] = n
-	net.mu.Unlock()
+	net.Mu.Unlock()
 
 	log.Printf("[sim] Node %d: joining network.\n", n.GetID())
 	go n.Run(net)
@@ -302,7 +302,7 @@ func (net *NetworkImpl) addNode(n mesh.INode) {
 
 // removeNode signals the node to stop and removes it from the map.
 func (net *NetworkImpl) removeNode(nodeID uint32) {
-	net.mu.Lock()
+	net.Mu.Lock()
 	if nd, ok := net.Nodes[nodeID]; ok {
 		// Close the node's quit channel if there's a direct handle
 		// We don't have a direct reference to 'quit', so let's do a type check
@@ -320,7 +320,7 @@ func (net *NetworkImpl) removeNode(nodeID uint32) {
 		// Remove the node from the map
 		delete(net.Nodes, nodeID)
 	}
-	net.mu.Unlock()
+	net.Mu.Unlock()
 }
 
 // getNodeChannel is a helper to get the 'messages' channel from the node.
@@ -344,8 +344,8 @@ func (net *NetworkImpl) IsInRange(node1 mesh.INode, node2 mesh.INode) bool {
 // Checks each transmission in the map to see if the node is within range of any on going transmission
 // Used as part of CSMA/CA
 func (net *NetworkImpl) IsChannelFree(node mesh.INode) bool {
-	net.mu.RLock()
-	defer net.mu.RUnlock()
+	net.Mu.RLock()
+	defer net.Mu.RUnlock()
 	for _, tx := range net.transmissions {
 		if tx.Active && net.IsInRange(node, tx.Sender) {
 			return false
@@ -356,8 +356,8 @@ func (net *NetworkImpl) IsChannelFree(node mesh.INode) bool {
 
 // get node from map
 func (net *NetworkImpl) GetNode(nodeId uint32) (mesh.INode, error) {
-	net.mu.RLock()
-	defer net.mu.RUnlock()
+	net.Mu.RLock()
+	defer net.Mu.RUnlock()
 	if nd, ok := net.Nodes[nodeId]; ok {
 		return nd, nil
 	}
@@ -365,8 +365,8 @@ func (net *NetworkImpl) GetNode(nodeId uint32) (mesh.INode, error) {
 }
 
 func (net *NetworkImpl) ActiveTransmissions() int {
-	net.mu.RLock()
-	defer net.mu.RUnlock()
+	net.Mu.RLock()
+	defer net.Mu.RUnlock()
 	list := make([]*Transmission, 0, len(net.transmissions))
 	for _, t := range net.transmissions {
 		if t.Active {

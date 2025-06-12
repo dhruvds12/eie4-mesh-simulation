@@ -59,6 +59,11 @@ type CSMAcfg struct {
 // new top-level network settings
 type NetworkCfg struct {
 	LossRate float64 `yaml:"loss_rate" json:"loss_rate"`
+	Failures struct {
+		Count      int           `yaml:"count"      json:"count"`
+		StartDelay time.Duration `yaml:"start_delay" json:"start_delay"`
+		Interval   time.Duration `yaml:"interval"    json:"interval"`
+	} `yaml:"failures" json:"failures"`
 }
 
 type Scenario struct {

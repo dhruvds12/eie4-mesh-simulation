@@ -157,6 +157,9 @@ func (r *Runner) Run() error {
 		}
 	}
 
+	// Starts a go routine to manage removal of nodes from network to simulate instability
+	r.startFailureSimulator()
+
 	// ── wait for generator to signal done ────────────────────────────────
 	<-r.quit
 
@@ -332,6 +335,47 @@ func (r *Runner) emitRandomTraffic() {
 		go from.SendData(r.net, packet.BROADCAST_ADDR, "hello", 0)
 	}
 	// r.coll.AddSent()
+}
+
+func (r *Runner) startFailureSimulator() {
+  cfg := r.sc.Network.Failures
+  if cfg.Count <= 0 {
+    return
+  }
+
+  go func() {
+    // initial delay before the first failure
+    time.Sleep(cfg.StartDelay)
+
+    for i := 0; i < cfg.Count; i++ {
+      select {
+      case <-r.quit:
+        return
+      case <-time.After(cfg.Interval):
+        // take a snapshot of alive node IDs
+        netImpl, ok := r.net.(*network.NetworkImpl)
+        if !ok {
+          return
+        }
+
+        netImpl.Mu.RLock()
+        alive := make([]uint32, 0, len(netImpl.Nodes))
+        for id := range netImpl.Nodes {
+          alive = append(alive, id)
+        }
+        netImpl.Mu.RUnlock()
+
+        if len(alive) == 0 {
+          return
+        }
+
+        // pick one at random and remove it
+        victim := alive[rand.Intn(len(alive))]
+        r.net.Leave(victim)
+        log.Printf("[Runner] Simulated failure: node %d went offline\n", victim)
+      }
+    }
+  }()
 }
 
 func choosePacket(m map[string]float64) string {

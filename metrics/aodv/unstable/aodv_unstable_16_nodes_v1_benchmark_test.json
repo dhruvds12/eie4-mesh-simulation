@@ -1,0 +1,50 @@
+{
+  "total_sent": 251,
+  "sent_by_type": {
+    "0": 26,
+    "18": 107,
+    "4": 118
+  },
+  "total_control_sent": 66,
+  "control_sent_by_type": {
+    "1": 5,
+    "15": 10,
+    "16": 15,
+    "2": 13,
+    "3": 7,
+    "6": 16
+  },
+  "total_delivered": 207,
+  "delivered_by_type": {
+    "0": 93,
+    "18": 43,
+    "4": 71
+  },
+  "total_control_delivered": 184,
+  "collisions": 408,
+  "collisions_by_type": {
+    "1": 19,
+    "15": 56,
+    "16": 12,
+    "18": 91,
+    "2": 13,
+    "3": 3,
+    "4": 157,
+    "6": 57
+  },
+  "hop_sum": 189519563060,
+  "hop_samples": 207,
+  "total_lost": 6,
+  "no_route": 1,
+  "no_route_user": 6,
+  "user_not_at_node": 0,
+  "received_ack": 0,
+  "requested_ack": 0,
+  "tx_queue_drop": 0,
+  "start_time": "10:16:29.408664",
+  "end_time": "10:19:14.667625",
+  "start_up_time_secs": 90,
+  "traffic_gen_time_secs": 120
+}
+869014176
+658353869
