@@ -162,12 +162,12 @@ func NewAODVRouter(ownerID uint32, bus *eventBus.EventBus) *AODVRouter {
 	r.RreqHopLimit = 10
 	r.UreqHopLimit = 10
 
-	r.EnableAdaptiveRERR = true
+	r.EnableAdaptiveRERR = false
 	r.FailureThreshold = 5
 	r.FailureWindow = 60 * time.Second
 
-	r.EnableRouteRevalidation = true
-	r.EnableLinkHealthMonitor = true
+	r.EnableRouteRevalidation = false
+	r.EnableLinkHealthMonitor = false
 
 	r.linkFailureLog = make(map[uint32][]time.Time)
 	r.linkAckSeen = make(map[uint32]int)
@@ -417,14 +417,14 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 				}
 
 				// either adaptive is off, or threshold has been reached
-				log.Printf("[TIMEOUT] Node %d msgID=%d → link %d broken\n", r.ownerID, msgID, tx.NextHop)
-				deleteIds = append(deleteIds, msgID)
-				r.InvalidateRoutes(tx.NextHop, tx.Dest, 0)
-				if r.ownerID != tx.Origin {
-					if rt, ok := r.getRoute(tx.Origin); ok {
-						r.sendRERR(net, node, rt.NextHop, tx.Dest, tx.NextHop, msgID, tx.Origin)
-					}
-				}
+				// log.Printf("[TIMEOUT] Node %d msgID=%d → link %d broken\n", r.ownerID, msgID, tx.NextHop)
+				// deleteIds = append(deleteIds, msgID)
+				// r.InvalidateRoutes(tx.NextHop, tx.Dest, 0)
+				// if r.ownerID != tx.Origin {
+				// 	if rt, ok := r.getRoute(tx.Origin); ok {
+				// 		r.sendRERR(net, node, rt.NextHop, tx.Dest, tx.NextHop, msgID, tx.Origin)
+				// 	}
+				// }
 			}
 
 			r.pendingMu.Lock()
