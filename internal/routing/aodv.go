@@ -417,14 +417,14 @@ func (r *AODVRouter) runPendingTxChecker(net mesh.INetwork, node mesh.INode) {
 				}
 
 				// either adaptive is off, or threshold has been reached
-				// log.Printf("[TIMEOUT] Node %d msgID=%d → link %d broken\n", r.ownerID, msgID, tx.NextHop)
-				// deleteIds = append(deleteIds, msgID)
-				// r.InvalidateRoutes(tx.NextHop, tx.Dest, 0)
-				// if r.ownerID != tx.Origin {
-				// 	if rt, ok := r.getRoute(tx.Origin); ok {
-				// 		r.sendRERR(net, node, rt.NextHop, tx.Dest, tx.NextHop, msgID, tx.Origin)
-				// 	}
-				// }
+				log.Printf("[TIMEOUT] Node %d msgID=%d → link %d broken\n", r.ownerID, msgID, tx.NextHop)
+				deleteIds = append(deleteIds, msgID)
+				r.InvalidateRoutes(tx.NextHop, tx.Dest, 0)
+				if r.ownerID != tx.Origin {
+					if rt, ok := r.getRoute(tx.Origin); ok {
+						r.sendRERR(net, node, rt.NextHop, tx.Dest, tx.NextHop, msgID, tx.Origin)
+					}
+				}
 			}
 
 			r.pendingMu.Lock()
