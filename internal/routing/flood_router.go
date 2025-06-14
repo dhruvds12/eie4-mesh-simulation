@@ -69,7 +69,7 @@ type tx struct {
 const (
 	defaultCcaWindow      = 5 * time.Millisecond
 	defaultCcaSample      = 100 * time.Microsecond
-	defaultInitialBackoff = 100 * time.Millisecond
+	defaultInitialBackoff = 300 * time.Millisecond
 	defaultMaxBackoff     = 2 * time.Second
 	defaultBeUnit         = 20 * time.Millisecond
 	defaultBeMaxExp       = 5
@@ -149,8 +149,13 @@ func (r *FloodRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint
 		return
 	}
 
-	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_DATA})
-	r.trackIfAckRequested(pktID, pkt, flags)
+	if destID != packet.BROADCAST_ADDR {
+		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_DATA})
+		r.trackIfAckRequested(pktID, pkt, flags)
+	} else {
+		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageSent, PacketType: packet.PKT_DATA_BROADCAST})
+
+	}
 }
 
 func (r *FloodRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendUserID, destUserID uint32, payload string, flags uint8) {
@@ -183,7 +188,7 @@ func (r *FloodRouter) HandleMessage(net mesh.INetwork, node mesh.INode, buf []by
 
 	// implicit ACK: we overhear our own PacketID forwarded by somebody else
 	r.pendingMu.Lock()
-	if _, ok := r.pending[bh.PacketID]; ok && bh.SrcNodeID != r.ownerID {
+	if _, ok := r.pending[bh.PacketID]; ok && bh.PrevHopID != r.ownerID {
 		delete(r.pending, bh.PacketID)
 		r.pendingMu.Unlock()
 		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventReceivedDataAck})
@@ -200,9 +205,9 @@ func (r *FloodRouter) HandleMessage(net mesh.INetwork, node mesh.INode, buf []by
 
 	switch bh.PacketType {
 	case packet.PKT_DATA:
-		r.handleData(net, node, buf, &bh)
+		r.handleData(net, node, buf)
 	case packet.PKT_USER_MSG:
-		r.handleUserMsg(net, node, buf, &bh)
+		r.handleUserMsg(net, node, buf)
 	case packet.PKT_BROADCAST_INFO:
 		r.handleBroadcastInfo(net, node, buf)
 	case packet.PKT_ACK:
@@ -346,8 +351,8 @@ func (r *FloodRouter) SetRoutingParams(th, rreqLim, ureqLim int)   {}
 // Packet handlers
 // -----------------------------------------------------------------------------
 
-func (r *FloodRouter) handleData(net mesh.INetwork, node mesh.INode, buf []byte, bh *packet.BaseHeader) {
-	_, dh, payload, err := packet.DeserialiseDataPacket(buf)
+func (r *FloodRouter) handleData(net mesh.INetwork, node mesh.INode, buf []byte) {
+	bh, dh, payload, err := packet.DeserialiseDataPacket(buf)
 	if err != nil {
 		return
 	}
@@ -355,13 +360,21 @@ func (r *FloodRouter) handleData(net mesh.INetwork, node mesh.INode, buf []byte,
 	// deliver locally if final destination matches this node
 	if dh.FinalDestID == r.ownerID {
 		if bh.Flags == packet.REQ_ACK {
-			r.sendAck(net, node, bh.PacketID, dh.OriginNodeID)
+			r.sendAck(net, node, bh.PacketID, bh.OriginNodeID)
 		}
 
 		log.Printf("[sim] Node %d: DATA arrived. Payload = %q\n", r.ownerID, payload)
 
-		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageDelivered, NodeID: r.ownerID, Payload: string(payload), OtherNodeID: dh.OriginNodeID, PacketType: packet.PKT_DATA, Timestamp: time.Now()})
+		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageDelivered, NodeID: r.ownerID, Payload: string(payload), OtherNodeID: bh.OriginNodeID, PacketType: packet.PKT_DATA, Timestamp: time.Now()})
 		return
+	}
+
+	if dh.FinalDestID == packet.BROADCAST_ADDR {
+		log.Printf("[sim] Node %d: DATA BROADCAST arrived. Payload = %q\n", r.ownerID, payload)
+		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageDelivered, NodeID: r.ownerID, Payload: string(payload), OtherNodeID: bh.OriginNodeID, PacketType: packet.PKT_DATA_BROADCAST, Timestamp: time.Now()})
+		if bh.HopCount > packet.DATA_BROADCAST_LIMIT {
+			return
+		}
 	}
 
 	// forward if TTL not exceeded
@@ -371,20 +384,20 @@ func (r *FloodRouter) handleData(net mesh.INetwork, node mesh.INode, buf []byte,
 
 	// build a *new* packet with incremented hop count and broadcast again (we
 	// keep the original PacketID so that downstream nodes can de‑duplicate).
-	fwd, _, _ := packet.CreateDataPacket(dh.OriginNodeID, r.ownerID, dh.FinalDestID, packet.BROADCAST_NH, bh.HopCount+1, payload, bh.Flags, bh.PacketID)
+	fwd, _, _ := packet.CreateDataPacket(bh.OriginNodeID, r.ownerID, dh.FinalDestID, packet.BROADCAST_NH, bh.HopCount+1, payload, bh.Flags, bh.PacketID)
 
 	r.floodAfterJitter(net, node, fwd, bh.PacketID)
 }
 
-func (r *FloodRouter) handleUserMsg(net mesh.INetwork, node mesh.INode, buf []byte, bh *packet.BaseHeader) {
-	_, umh, payload, err := packet.DeserialiseUSERMessagePacket(buf)
+func (r *FloodRouter) handleUserMsg(net mesh.INetwork, node mesh.INode, buf []byte) {
+	bh, umh, payload, err := packet.DeserialiseUSERMessagePacket(buf)
 	if err != nil {
 		return
 	}
 
 	if node.HasConnectedUser(umh.ToUserID) {
 		if bh.Flags == packet.REQ_ACK {
-			r.sendAck(net, node, bh.PacketID, umh.OriginNodeID)
+			r.sendAck(net, node, bh.PacketID, bh.OriginNodeID)
 		}
 		log.Printf("[sim] Node %d: USER MESSAGE arrived for user %d from %d. Payload = %q\n", r.ownerID, umh.ToUserID, umh.FromUserID, payload)
 		r.eventBus.Publish(eventBus.Event{Type: eventBus.EventMessageDelivered, NodeID: r.ownerID, Payload: string(payload), OtherNodeID: umh.FromUserID, PacketType: packet.PKT_USER_MSG, Timestamp: time.Now()})
@@ -395,7 +408,7 @@ func (r *FloodRouter) handleUserMsg(net mesh.INetwork, node mesh.INode, buf []by
 		return
 	}
 
-	fwd, _, _ := packet.CreateUSERMessagePacket(umh.OriginNodeID, r.ownerID, umh.FromUserID, umh.ToUserID, umh.ToNodeID, packet.BROADCAST_NH, bh.HopCount+1, payload, bh.Flags, bh.PacketID)
+	fwd, _, _ := packet.CreateUSERMessagePacket(bh.OriginNodeID, r.ownerID, umh.FromUserID, umh.ToUserID, umh.ToNodeID, packet.BROADCAST_NH, bh.HopCount+1, payload, bh.Flags, bh.PacketID)
 	r.floodAfterJitter(net, node, fwd, bh.PacketID)
 }
 
@@ -407,12 +420,16 @@ func (r *FloodRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, bu
 
 	r.eventBus.Publish(eventBus.Event{Type: eventBus.EventControlMessageDelivered, PacketType: packet.PKT_BROADCAST_INFO})
 
-	ofs := 16
+	ofs := 20
+	if len(buf) < ofs+4 {
+		return
+	}
+
 	var dh packet.DiffBroadcastInfoHeader
 	if err := dh.Deserialise(buf[ofs:]); err != nil {
 		return
 	}
-	ofs += 8
+	ofs += 4
 
 	total := int(dh.NumAdded) + int(dh.NumRemoved)
 	if len(buf) < ofs+4*total {
@@ -427,14 +444,14 @@ func (r *FloodRouter) handleBroadcastInfo(net mesh.INetwork, node mesh.INode, bu
 
 	// update GUT
 	for _, u := range added {
-		r.setUserEntry(u, dh.OriginNodeID)
+		r.setUserEntry(u, bh.OriginNodeID)
 	}
 
 	// forward if hops < TTL
 	if bh.HopCount >= defaultTTL {
 		return
 	}
-	fwd, pid, _ := packet.CreateDiffBroadcastInfoPacket(r.ownerID, dh.OriginNodeID, added, nil, bh.HopCount+1, bh.PacketID)
+	fwd, pid, _ := packet.CreateDiffBroadcastInfoPacket(r.ownerID, bh.OriginNodeID, added, nil, bh.HopCount+1, bh.PacketID)
 	r.floodAfterJitter(net, node, fwd, pid)
 }
 
@@ -492,6 +509,8 @@ func (r *FloodRouter) BroadcastMessageCSMA(net mesh.INetwork, sender mesh.INode,
 		if r.waitClearChannel(net, sender) {
 			log.Printf("[CSMA] Node %d (flood):   Channel idle %v – transmit", r.ownerID, r.CcaWindow)
 			net.BroadcastMessage(sendPacket, sender, packetID)
+			radioBusy := 300*time.Millisecond
+			time.Sleep(radioBusy)
 			return
 		}
 
@@ -534,4 +553,15 @@ func (r *FloodRouter) nextBackoffBE(exp int) (time.Duration, int) {
 	slots := 1 << exp
 	slot := rand.Intn(slots)
 	return time.Duration(slot) * r.BeUnit, exp + 1
+}
+
+func (r *FloodRouter) GUTSnapshot() map[uint32]UserEntry {
+	r.gutMu.RLock()
+	defer r.gutMu.RUnlock()
+	// shallow copy is fine for just keys
+	snap := make(map[uint32]UserEntry, len(r.gut))
+	for k, v := range r.gut {
+		snap[k] = v
+	}
+	return snap
 }

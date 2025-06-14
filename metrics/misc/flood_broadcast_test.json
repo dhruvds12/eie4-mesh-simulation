@@ -1,0 +1,87 @@
+{
+  "total_sent": 117,
+  "sent_by_type": {
+    "0": 8,
+    "18": 52,
+    "4": 57
+  },
+  "total_control_sent": 75,
+  "control_sent_by_type": {
+    "6": 75
+  },
+  "total_delivered": 198,
+  "delivered_by_type": {
+    "0": 125,
+    "18": 34,
+    "4": 39
+  },
+  "total_control_delivered": 916,
+  "collisions": 500,
+  "collisions_by_type": {
+    "18": 147,
+    "4": 227,
+    "6": 126
+  },
+  "hop_sum": 242844480553,
+  "hop_samples": 198,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0,
+  "user_not_at_node": 0,
+  "received_ack": 0,
+  "requested_ack": 0,
+  "tx_queue_drop": 0
+}
+
+
+# ────────────── simulation timing ──────────────
+duration: 30s           # time we KEEP GENERATING traffic #90s
+end_mode: drain         # immediate | drain
+drain_timeout: 600s      # max extra wall-clock time we allow when end_mode = drain #300
+
+# ────────────── randomness ─────────────────────
+seed: 12345
+
+# ────────────── playground ─────────────────────
+area_km2: 5.0
+
+nodes:
+  count: 25 #10
+  placement: grid        # uniform | grid | hotspot   (only grid implemented)
+  join_delay: 3000ms
+
+users:
+  per_node: 6
+
+startup_delay: 30s
+
+# ────────────── traffic model ──────────────────
+traffic:
+  pattern: poisson
+  msg_per_node_per_min: 10 #10
+  restrict_to_known_routes: false 
+  acks: 0                       # out of 1.0
+  packet_mix:
+    DATA:      0.45
+    USER_MSG:  0.45
+    BROADCAST: 0.1
+
+# ────────────── routing / MAC ───────────────────
+routing:
+  router_type: 1                # 0 - AODV | 1 - flood | Default - AODV
+  max_hops: 5                   # TODO NOT ACTUALLY A WORKING FIELD
+  reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
+  rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
+  ureq_hop_limit:      8        # drop UREQ when hop-count >= ureq_hop_limit
+
+csma:
+  cca_window:      5ms      # how long we must sense idle
+  cca_sample:      100µs    # sampling granularity inside that window
+  initial_backoff: 500ms
+  max_backoff:     10s
+  backoff_scheme:  binary   # binary | be
+  be_unit:         20ms     # only used when backoff_scheme = be
+  be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
+
+logging:
+  metrics_file: metrics/flood_broadcast_test.json

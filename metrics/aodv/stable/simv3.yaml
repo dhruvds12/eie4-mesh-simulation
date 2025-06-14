@@ -1,0 +1,51 @@
+# ────────────── simulation timing ──────────────
+duration: 120s           # time we KEEP GENERATING traffic #90s
+end_mode: drain         # immediate | drain
+drain_timeout: 6000s      # max extra wall-clock time we allow when end_mode = drain #300
+
+# ────────────── randomness ─────────────────────
+seed: 12345
+
+# ────────────── playground ─────────────────────
+area_km2: 3.0
+
+nodes:
+  count: 10 #10
+  placement: grid        # uniform | grid | hotspot   (only grid implemented)
+  join_delay: 3000ms
+
+users:
+  per_node: 6
+
+startup_delay: 120s
+
+# ────────────── traffic model ──────────────────
+traffic:
+  pattern: poisson
+  msg_per_node_per_min: 10 #10
+  restrict_to_known_routes: true 
+  acks: 0                       # out of 1.0
+  packet_mix:
+    DATA:      0.5
+    USER_MSG:  0.5
+    BROADCAST: 0
+
+# ────────────── routing / MAC ───────────────────
+routing:
+  router_type: 0                # 0 - AODV | 1 - flood | Default - AODV
+  max_hops: 5                   # TODO NOT ACTUALLY A WORKING FIELD
+  reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
+  rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
+  ureq_hop_limit:      8        # drop UREQ when hop-count >= ureq_hop_limit
+
+csma:
+  cca_window:      5ms      # how long we must sense idle
+  cca_sample:      100µs    # sampling granularity inside that window
+  initial_backoff: 500ms
+  max_backoff:     10s
+  backoff_scheme:  binary   # binary | be
+  be_unit:         20ms     # only used when backoff_scheme = be
+  be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
+
+logging:
+  metrics_file: metrics/aodv/stable/aodv_stable_20_nodes_v3_run1.json

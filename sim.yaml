@@ -1,51 +1,68 @@
 # ────────────── simulation timing ──────────────
-duration: 90s           # time we KEEP GENERATING traffic #90s
+duration: 120s           # time we KEEP GENERATING traffic #90s
 end_mode: drain         # immediate | drain
-drain_timeout: 300s      # max extra wall-clock time we allow when end_mode = drain #300
+drain_timeout: 6000s      # max extra wall-clock time we allow when end_mode = drain #300
 
 # ────────────── randomness ─────────────────────
 seed: 12345
 
 # ────────────── playground ─────────────────────
-area_km2: 3.0
+area_km2: 9.0
 
 nodes:
-  count: 10 #10
+  count: 16 #10
   placement: grid        # uniform | grid | hotspot   (only grid implemented)
   join_delay: 3000ms
 
 users:
-  per_node: 2
+  per_node: 6
 
-startup_delay: 30s
+startup_delay: 60s
 
 # ────────────── traffic model ──────────────────
 traffic:
   pattern: poisson
-  msg_per_node_per_min: 10 #10
-  restrict_to_known_routes: false 
-  acks: 0                       # out of 1.0
+  # msg_per_node_per_min: 10 #10 ## obselete
+  start_msg_per_node_per_min: 10.0
+  end_msg_per_node_per_min: 10.0
+  restrict_to_known_routes: true 
+  acks: 0.00                       # out of 1.0
   packet_mix:
-    DATA:      1
-    USER_MSG:  0
-    BROADCAST: 0.0
+    DATA:      0.45
+    USER_MSG:  0.45
+    BROADCAST: 0.1
+  known_user_fraction: 0.8
+  start:
+    mode: after_join_count   # immediate | after_delay | after_join_count
+    # only for after_delay:
+    # delay: 30s
+    # only for after_join_count:
+    join_count: 16
+
+# ────────────── Network ───────────────────
+network:
+  loss_rate: 0.00
+  failures:
+    count: 0           # total number of nodes to take offline
+    start_delay: 20s   # wait this long before the first failure
+    interval: 30s      # wait this long between subsequent failures
 
 # ────────────── routing / MAC ───────────────────
 routing:
   router_type: 0                # 0 - AODV | 1 - flood | Default - AODV
   max_hops: 5                   # TODO NOT ACTUALLY A WORKING FIELD
-  reply_threshold_hops: 10       # only answer RREQ/UREQ if my route > 2 hops
+  reply_threshold_hops: 2       # only answer RREQ/UREQ if my route > 2 hops
   rreq_hop_limit:      8        # drop RREQ when hop-count >= rreq_hop_limit
   ureq_hop_limit:      8        # drop UREQ when hop-count >= ureq_hop_limit
 
 csma:
-  cca_window:      5ms      # how long we must sense idle
+  cca_window:      20ms      # how long we must sense idle
   cca_sample:      100µs    # sampling granularity inside that window
-  initial_backoff: 500ms
+  initial_backoff: 300ms
   max_backoff:     10s
-  backoff_scheme:  binary   # binary | be
-  be_unit:         20ms     # only used when backoff_scheme = be
-  be_max_exp:      5        # BE grows from 0…be_max_exp inclusive
+  backoff_scheme:  be   # binary | be
+  be_unit:         75ms     # only used when backoff_scheme = be
+  be_max_exp:      10        # BE grows from 0…be_max_exp inclusive
 
 logging:
-  metrics_file: metrics/AODV_10_reply_threshold_node.json
+  metrics_file: metrics/aodv/stable/aodv_stable_16_nodes.json

@@ -152,7 +152,7 @@ func (n *nodeImpl) HandleMessage(net mesh.INetwork, receivedPacket []byte) {
 	case packet.PKT_DATA, packet.PKT_RREP, packet.PKT_RREQ, packet.PKT_RERR, packet.PKT_ACK, packet.PKT_BROADCAST_INFO, packet.PKT_BROADCAST, packet.PKT_UREP, packet.PKT_UREQ, packet.PKT_UERR, packet.PKT_USER_MSG:
 		n.router.HandleMessage(net, n, receivedPacket)
 	default:
-		log.Printf("Node %d: unknown message type from %d\n", n.id, bh.SrcNodeID)
+		log.Printf("Node %d: unknown message type from %d\n", n.id, bh.PrevHopID)
 	}
 }
 
@@ -331,4 +331,45 @@ func (n *nodeImpl) SetRoutingParams(th, rreqLim, ureqLim int) bool {
 		return true
 	}
 	return false
+}
+
+// func (n *nodeImpl) GetRandomKnownUser() (userID uint32, ok bool) {
+// 	gut := n.router.GUTSnapshot()
+// 	if len(gut) == 0 {
+// 		return 0, false
+// 	}
+// 	keys := make([]uint32, 0, len(gut))
+// 	for u := range gut {
+// 		keys = append(keys, u)
+// 	}
+// 	// pick one at random
+// 	return keys[rand.Intn(len(keys))], true
+// }
+
+func (n *nodeImpl) GetRandomKnownUser() (userID uint32, ok bool) {
+    // take a snapshot of the GUT
+    gut := n.router.GUTSnapshot()
+
+    // lock local users so we can test membership
+    n.muUsers.RLock()
+    defer n.muUsers.RUnlock()
+
+    // build a list of candidates: users in GUT but not locally connected
+    candidates := make([]uint32, 0, len(gut))
+    for uid, entry := range gut {
+        // Skip if this node is the home node for that user
+        if entry.NodeID == n.id {
+            continue
+        }
+        // Skip if user is currently attached to me
+        if n.connectedUsers[uid] {
+            continue
+        }
+        candidates = append(candidates, uid)
+    }
+
+    if len(candidates) == 0 {
+        return 0, false
+    }
+    return candidates[rand.Intn(len(candidates))], true
 }

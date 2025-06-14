@@ -6,34 +6,35 @@ import (
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
-//  Diff-BroadcastInfo header  -- matches ESP32 firmware byte-for-byte
+//
+//	Diff-BroadcastInfo header  -- matches ESP32 firmware byte-for-byte
+//
 // ──────────────────────────────────────────────────────────────────────────────
 type DiffBroadcastInfoHeader struct {
-	OriginNodeID uint32
 	NumAdded     uint16
 	NumRemoved   uint16
 }
 
 func (h *DiffBroadcastInfoHeader) Serialise() []byte {
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint32(buf[0:4], h.OriginNodeID)
-	binary.LittleEndian.PutUint16(buf[4:6], h.NumAdded)
-	binary.LittleEndian.PutUint16(buf[6:8], h.NumRemoved)
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint16(buf[0:2], h.NumAdded)
+	binary.LittleEndian.PutUint16(buf[2:4], h.NumRemoved)
 	return buf
 }
 
 func (h *DiffBroadcastInfoHeader) Deserialise(buf []byte) error {
-	if len(buf) < 8 {
+	if len(buf) < 4 {
 		return fmt.Errorf("buffer too short for DiffBroadcastInfoHeader")
 	}
-	h.OriginNodeID = binary.LittleEndian.Uint32(buf[0:4])
-	h.NumAdded = binary.LittleEndian.Uint16(buf[4:6])
-	h.NumRemoved = binary.LittleEndian.Uint16(buf[6:8])
+	h.NumAdded = binary.LittleEndian.Uint16(buf[0:2])
+	h.NumRemoved = binary.LittleEndian.Uint16(buf[2:4])
 	return nil
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-//  Packet builder
+//
+//	Packet builder
+//
 // ──────────────────────────────────────────────────────────────────────────────
 func CreateDiffBroadcastInfoPacket(
 	srcID uint32,
@@ -48,14 +49,16 @@ func CreateDiffBroadcastInfoPacket(
 
 	bh := BaseHeader{
 		DestNodeID: BROADCAST_ADDR,
-		SrcNodeID:  srcID,
+		OriginNodeID: originNodeID,
+		PrevHopID:  srcID,
 		PacketID:   pid,
 		PacketType: PKT_BROADCAST_INFO,
 		HopCount:   hopCount,
+		Flags: 0,
+		Reserved: 0,
 	}
 
 	dh := DiffBroadcastInfoHeader{
-		OriginNodeID: originNodeID,
 		NumAdded:     uint16(len(added)),
 		NumRemoved:   uint16(len(removed)),
 	}

@@ -1,0 +1,41 @@
+{
+  "total_sent": 495,
+  "sent_by_type": {
+    "18": 246,
+    "4": 249
+  },
+  "total_control_sent": 95,
+  "control_sent_by_type": {
+    "15": 13,
+    "16": 57,
+    "6": 25
+  },
+  "total_delivered": 382,
+  "delivered_by_type": {
+    "18": 188,
+    "4": 194
+  },
+  "total_control_delivered": 360,
+  "collisions": 3241,
+  "collisions_by_type": {
+    "15": 152,
+    "16": 61,
+    "18": 1025,
+    "4": 986,
+    "6": 114,
+    "7": 903
+  },
+  "hop_sum": 305474051032,
+  "hop_samples": 382,
+  "total_lost": 0,
+  "no_route": 0,
+  "no_route_user": 0,
+  "user_not_at_node": 0,
+  "received_ack": 687,
+  "requested_ack": 915,
+  "tx_queue_drop": 0,
+  "start_time": "14:01:47.105305",
+  "end_time": "14:16:22.362023",
+  "start_up_time_secs": 90,
+  "traffic_gen_time_secs": 120
+}

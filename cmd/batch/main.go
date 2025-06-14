@@ -5,6 +5,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	eb "mesh-simulation/internal/eventBus"
@@ -54,12 +56,44 @@ func main() {
 	metrics.Global = metrics.NewCollector()
 
 	runner := sim.NewRunner(sc, bus, net, metrics.Global)
-	if err := runner.Run(); err != nil {
-		log.Fatalf("runner: %v", err)
+	// if err := runner.Run(); err != nil {
+	// 	log.Fatalf("runner: %v", err)
+	// }
+
+	// if err := metrics.Global.Flush(sc.Logging.MetricsFile); err != nil {
+	// 	log.Printf("flush‑metrics: %v", err)
+	// }
+
+	// 1) catch Ctrl-C / SIGTERM
+	sigCh := make(chan os.Signal, 1)
+	// subscribe to Interrupt (Ctrl-C), Terminate, *and* Hangup
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+
+	// 2) run the simulation in its own goroutine
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- runner.Run()
+	}()
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			log.Printf("runner error: %v", err)
+		}
+	case s := <-sigCh:
+		log.Printf("received signal %v: shutting down early…", s)
+		runner.Stop()   // <— ask it to wind down
+		err := <-runErr // <— wait for it to actually exit
+		if err != nil {
+			log.Printf("runner stopped with error: %v", err)
+		}
 	}
 
+	// 3) _always_ flush metrics before exit
 	if err := metrics.Global.Flush(sc.Logging.MetricsFile); err != nil {
-		log.Printf("flush‑metrics: %v", err)
+		log.Printf("flush-metrics: %v", err)
+	} else {
+		log.Printf("stats written to %s", sc.Logging.MetricsFile)
 	}
 
 	log.Printf("run complete – stats written to %s", sc.Logging.MetricsFile)
