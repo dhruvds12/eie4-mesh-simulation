@@ -510,7 +510,7 @@ func (r *AODVRouter) SendData(net mesh.INetwork, sender mesh.INode, destID uint3
 		// TODO need to drop if the queue is full
 		r.txQueue <- outgoingTx{net: net, sender: sender, pkt: completePacket, pktID: packetID}
 
-		if r.EnableLinkHealthMonitor {
+		if r.EnableLinkHealthMonitor && nextHop != destID {
 
 			r.linkMu.Lock()
 			m := r.linkSentLog[nextHop]
@@ -615,7 +615,7 @@ func (r *AODVRouter) SendUserMessage(net mesh.INetwork, sender mesh.INode, sendU
 		PacketType: packet.PKT_USER_MSG,
 	})
 
-	if r.EnableLinkHealthMonitor {
+	if r.EnableLinkHealthMonitor && nextHop != userEntry.NodeID {
 
 		r.linkMu.Lock()
 		m := r.linkSentLog[nextHop]
@@ -1344,6 +1344,19 @@ func (r *AODVRouter) handleDataForward(net mesh.INetwork, node mesh.INode, recei
 		return
 	}
 
+	if r.EnableLinkHealthMonitor && route.NextHop != dest {
+
+		r.linkMu.Lock()
+		m := r.linkSentLog[route.NextHop]
+		if m == nil {
+			m = make(map[uint32]time.Time)
+			r.linkSentLog[route.NextHop] = m
+		}
+		m[packetID] = time.Now()
+		r.linkMu.Unlock()
+
+	}
+
 	// // If the next hop is not the destination, we need to track the transaction by overhearing it
 	// expire := time.Now().Add(3 * time.Second) // e.g. 3s
 	// r.pendingTxs[bh.PacketID] = PendingTx{
@@ -1462,6 +1475,20 @@ func (r *AODVRouter) handleUserMessage(net mesh.INetwork, node mesh.INode, recei
 			ExpiryTime: expire,
 		}
 		r.pendingMu.Unlock()
+
+	}
+
+	// only track the link if enabled link health monitor and not the destination node as dest node will not rebroadcast
+	if r.EnableLinkHealthMonitor && route.NextHop != dest {
+
+		r.linkMu.Lock()
+		m := r.linkSentLog[route.NextHop]
+		if m == nil {
+			m = make(map[uint32]time.Time)
+			r.linkSentLog[route.NextHop] = m
+		}
+		m[packetID] = time.Now()
+		r.linkMu.Unlock()
 
 	}
 
